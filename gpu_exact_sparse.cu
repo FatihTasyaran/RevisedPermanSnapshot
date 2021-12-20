@@ -539,43 +539,8 @@ template <class C, class S>
   //if(thread_id == 0)
   //printf("offset: %d \n", offset);
   shared_cvals = (S*) ((unsigned long long)(&shared_rows[total]) + (sizeof(S) - offset));
-  
-  /*  if(sizeof(S) == 4) {
-    shared_cvals = (S*) &shared_rows[total];
-  } else if(sizeof(S) == 8) {
-    int offset = (&shared_rows[total]) % 8;
-    if(offset != 0) {
-      shared_cvals = (S*) (&shared_rows[total] + (8 - offset));
-    }
-  }
-  
-  if((nov * block_dim + nov + 1 + total % 2) == 0 && sizeof(S) == 4) {
-    shared_cvals = (S*) &shared_rows[total]; // size = total num of elts -- Misaligned address
-  } else if(sizeof(S) == 4){
-    shared_cvals = (S*) (&shared_rows[total+1]); // size = total num of elts -- Misaligned address
-  }
-  
-  if((nov * block_dim + nov + 1 + total % 8) == 0 && sizeof(S) == 8) {
-    shared_cvals = (S*) &shared_rows[total]; // size = total num of elts -- Misaligned address
-  } else if(sizeof(S) == 8) {
-    unsigned int offset = 8 - ((nov * block_dim + nov + 1 + total) % 8);
-    shared_cvals = (S*) (&shared_rows[total+offset]); // size = total num of elts -- Misaligned address
-    }*/
-  
-  /*
-  if(tid == 0){
-  printf("size of T: %d \n" , sizeof(T));
+
     
-    printf("%2: %ul \n", nov * block_dim + nov + 1 + total % 2);
-    printf("%4: %ul \n", nov * block_dim + nov + 1 + total % 4);
-    printf("%8: %ul \n", nov * block_dim + nov + 1 + total % 8);
-    
-    printf("%2: %ul \n", (nov * block_dim + nov + 1 + total) % 2);
-    printf("%4: %ul \n", (nov * block_dim + nov + 1 + total) % 4);
-    printf("%8: %ul \n", (nov * block_dim + nov + 1 + total) % 8);
-  }
-  */
-  
   __syncthreads();
 
   for (int k = 0; k < nov; k++) {
@@ -610,6 +575,8 @@ template <class C, class S>
   for (int k = 0; k < (nov-1); k++) {
     if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
       for (int j = shared_cptrs[k]; j < shared_cptrs[k+1]; j++) {
+	//printf("tid(%d)(%d)(%d) Will access -- j: %d - ind %d --- &: %p \n", tid, thread_id, blockIdx.x, j, block_dim*shared_rows[j] + thread_id, &my_x[block_dim*shared_rows[j] + thread_id]);
+	//__syncthreads();
         my_x[block_dim*shared_rows[j] + thread_id] += shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
       }
     }
@@ -1084,6 +1051,8 @@ template <class C, class S>
     printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
   }
 
+  
+  
   cudaSetDevice(device_id);
   S *d_cvals;
   int *d_cptrs, *d_rows;
@@ -1167,6 +1136,7 @@ template <class C, class S>
   C rs; //row sum
   C p = 1; //product of the elements in vector 'x'
   int total = 0;
+  int zero = 0;
 
   //printf("Calculation bytes: %d \n", sizeof(p));
   //printf("Storage bytes: %d \n", sizeof(mat[0]));
@@ -1175,14 +1145,25 @@ template <class C, class S>
   for (int j = 0; j < nov; j++) {
     rs = .0f;
     for (int k = 0; k < nov; k++) {
-      if (mat[(j * nov) + k] != 0) {
+      if (mat[(j * nov) + k] != (S)0) {
         total++;
         rs += mat[(j * nov) + k];  // sum of row j
+      }
+      else{
+	zero++;
       }
     }
     x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
     p *= x[j];   // product of the elements in vector 'x'
   }
+
+  total = sparsemat->nnz;
+
+  printf("!!Total: %d | Zero: %d | nov*nov: %d!!\n", total, zero, nov*nov);
+  printf("!!total: %d --densemat->nov: %d !!\n", total, densemat->nov);
+  printf("!!total: %d --densemat->nnz: %d !!\n", total, densemat->nnz);
+  printf("!!total: %d --sparsemat->nnz: %d !!\n", total, sparsemat->nnz);
+  
   
   //For variable smem
   glob_nov = nov;
@@ -1196,19 +1177,26 @@ template <class C, class S>
 						 &block_dim,
 						 &kernel_xshared_coalescing_mshared_sparse<C,S>,
 						 xshared_coalescing_mshared_sparse_sharedmem,
-						 (int)max_shared_per_block);
+						 0);
 
-  size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(double);
+  size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(S);
 
   printf("==SC== Maximum Shared memory per block : %zu \n", max_shared_per_block);
   printf("==SC== Shared memory per block is set to : %zu \n", size);
   printf("==SC== Grid dim is set to : %d \n", grid_dim);
   printf("==SC== Block dim is set to : %d \n", block_dim);
 
+  printf("Calculation bytes: %d -- %d\n", sizeof(p), sizeof(C));
+  printf("Storage bytes: %d -- %d \n", sizeof(mat[0]), sizeof(S));
+
   if(grid_dim_multip != 1){
     grid_dim*=grid_dim_multip;
     printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
   }
+  
+  
+  //grid_dim = 160;
+  //block_dim = 192;
   
   S *d_cvals;
   int *d_cptrs, *d_rows;
@@ -1230,6 +1218,8 @@ template <class C, class S>
   long long end = (1LL << (nov-1));
   
   double stt = omp_get_wtime();
+ 
+  printf("Just before launch %d -- %d \n", grid_dim, block_dim);
   kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim , block_dim , size>>>(d_cptrs,
 										 d_rows,
 										 d_cvals,

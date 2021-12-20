@@ -949,7 +949,8 @@ int getNnz(S* mat2, int nov2){
     if(mat2[i] > (S)0)
       nnz2++;
   }
-  
+
+  printf("!!nnz2: %d!! \n", nnz2);
   return nnz2;
 }
 
@@ -993,10 +994,23 @@ SparseMatrix<S>* create_sparsematrix_from_densemat2(DenseMatrix<S>* densemat2, f
 template<class S>
 Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flags){
 
-  //cout << "In, compress_and_calculate_recursive-> " << recursive_count++ << endl;
+
+#ifdef DEBUG
+
+  std::cout << "*****" << std::endl;
+  cout << "In, compress_and_calculate_recursive-> " << recursive_count++ << endl;
   
-  //cout << "densemat->nov: " << densemat->nov << endl;
-  //cout << "densemat->nnz: " << densemat->nnz << endl;
+  cout << "densemat->nov: " << densemat->nov << endl;
+  cout << "densemat->nnz: " << densemat->nnz << endl;
+  
+  if(flags.type == "float" || flags.type == "double")
+    print_float_densematrix(densemat);
+  else
+    print_densematrix(densemat);
+
+  print_sparsematrix(sparsemat);
+  std::cout << "*****" << std::endl;
+#endif
   
   bool silent = 0;
   
@@ -1031,6 +1045,7 @@ Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S
       int nov2;
       d34compress(densemat->mat, densemat->nov, mat2, nov2, minDeg);
       DenseMatrix<S>* densemat2 = create_densematrix_from_mat2(mat2, nov2);
+      densemat2->nnz = getNnz(densemat2->mat, densemat2->nov);
       SparseMatrix<S>* sparsemat2 = create_sparsematrix_from_densemat2(densemat2, flags);
       
       if(!silent)
@@ -1047,11 +1062,15 @@ Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S
   }
   else{
 
+#ifndef ONLYCPU
     //if(flags.scaling_threshold != -1.0 && !max20(densemat))
     if(flags.scaling_threshold != -1.0)
       result = scale_and_calculate(densemat, sparsemat, flags, true);
     else
       result = RunAlgo(densemat, sparsemat, flags, true);
+#else
+    result = RunAlgo(densemat, sparsemat, flags, true);
+#endif
 
   }
   return result;

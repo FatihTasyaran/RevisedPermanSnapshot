@@ -9,6 +9,19 @@ int glob_total;
 int glob_sizeof_c; //Size of type used for calculation
 int glob_sizeof_s; //Size of type used for storage
 
+template<class S>
+int getNnz(S* mat2, int nov2){
+  int nnz2 = 0;
+
+  for(int i = 0; i < nov2*nov2; i++){
+    if(mat2[i] > (S)0)
+      nnz2++;
+  }
+
+  printf("!!nnz2: %d!! \n", nnz2);
+  return nnz2;
+}
+
 template <class T>
 double cpu_perman64_sparse(int* cptrs,
 			   int* rows,
@@ -1159,6 +1172,7 @@ template <class C, class S>
 
   total = sparsemat->nnz;
 
+  printf("!!Reported by func total: %d \n", getNnz(densemat->mat, nov));  
   printf("!!Total: %d | Zero: %d | nov*nov: %d!!\n", total, zero, nov*nov);
   printf("!!total: %d --densemat->nov: %d !!\n", total, densemat->nov);
   printf("!!total: %d --densemat->nnz: %d !!\n", total, densemat->nnz);

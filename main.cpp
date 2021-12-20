@@ -1651,8 +1651,8 @@ int main (int argc, char **argv)
 	DenseMatrix<double>* copy_densemat = copy_dense(densemat);
 	SparseMatrix<double>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	delete copy_densemat;
-	delete copy_sparsemat;
+	//delete copy_densemat;
+	//delete copy_sparsemat;
 	flags.type = "double"; //In case if scale_and_calculate change it
       }
 
@@ -1802,8 +1802,8 @@ int main (int argc, char **argv)
 	DenseMatrix<float>* copy_densemat = copy_dense(densemat);
 	SparseMatrix<float>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	delete copy_densemat;
-	delete copy_sparsemat;
+	//delete copy_densemat;
+	//delete copy_sparsemat;
 	flags.type = "float";//In case if scale_and_calculate change it
       }
 
@@ -1879,8 +1879,8 @@ int main (int argc, char **argv)
 	DenseMatrix<int>* copy_densemat = copy_dense(densemat);
 	SparseMatrix<int>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	delete copy_densemat;
-	delete copy_sparsemat;
+	//delete copy_densemat;
+	//delete copy_sparsemat;
 	flags.type = "int";
       }
       

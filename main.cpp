@@ -476,7 +476,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks_sparse";
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(densemat, sparsemat, flags);
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float, S>(densemat, sparsemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, S>(densemat, sparsemat, flags);
     }
     else if (perman_algo == 14){
 #ifdef DEBUG
@@ -682,9 +685,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks_sparse";
-      //This will change accordingly
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(densemat, sparsemat, flags);
-
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float, S>(densemat, sparsemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, S>(densemat, sparsemat, flags);
     }
   }
   else if(perman_algo == 17){
@@ -950,7 +954,7 @@ int getNnz(S* mat2, int nov2){
       nnz2++;
   }
 
-  printf("!!nnz2: %d!! \n", nnz2);
+  //printf("!!nnz2: %d!! \n", nnz2);
   return nnz2;
 }
 

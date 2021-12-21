@@ -18,55 +18,78 @@ int getNnz(S* mat2, int nov2){
       nnz2++;
   }
 
-  printf("!!nnz2: %d!! \n", nnz2);
+  //printf("!!nnz2: %d!! \n", nnz2);
   return nnz2;
 }
 
-template <class T>
-double cpu_perman64_sparse(int* cptrs,
-			   int* rows,
-			   T* cvals,
-			   T x[],
-			   int nov,
-			   long long start,
-			   long long end,
-			   int threads) {
-  double p = 0; //product of the elements in vector 'x'
-  long long one = 1;
-  long long chunk_size = (end - start) / threads + 1;
-  omp_set_num_threads(threads);
 
-  #pragma omp parallel
-  { 
-    double my_x[nov];
-    for (int i = 0; i < nov; i++) {
-      my_x[i] = x[i];
+//Need to be tailored for hybrid setting
+template <class C,class S>
+  double cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C xx[], long long start, long long end) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int* cptrs = sparsemat->cptrs;
+  int* rows = sparsemat->rows;
+  S* cvals = sparsemat->cvals;
+  int nov = sparsemat->nov;
+  //Pack parameters//
+  
+  double starttime = omp_get_wtime();
+  
+  C x[nov];   
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+#ifdef DTYPE
+  cout << "First letter of calculation type " << typeid(p).name() << endl;
+  cout << "First letter of storage type " << typeid(mat[0]).name() << endl;
+#endif
+  
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
     }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+  
+  long long one = 1;
+  //long long start = 1;
+  //long long end = (1LL << (nov-1));
+  
+  long long chunk_size = end / threads + 1;
+
+  printf("Should run with %d threads.. \n", threads);
+  #pragma omp parallel num_threads(threads) firstprivate(x)
+  { 
     int tid = omp_get_thread_num();
     long long my_start = start + tid * chunk_size;
-    long long my_end = min(start + ((tid+1) * chunk_size), end); 
-       
-    int s;  //+1 or -1 
-    double prod; //product of the elements in vector 'x'
-    double my_p = 0;
+    long long my_end = min(start + ((tid+1) * chunk_size), end);
+    
+    C s;  //+1 or -1 
+    C prod; //product of the elements in vector 'x'
+    C my_p = 0;
     long long i = my_start;
     long long gray = (i-1) ^ ((i-1) >> 1);
 
     for (int k = 0; k < (nov-1); k++) {
       if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
         for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-          my_x[rows[j]] += cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          x[rows[j]] += cvals[j]; // see Nijenhuis and Wilf - update x vector entries
         }
       }
     }
-    
+
     prod = 1.0;
     int zero_num = 0;
     for (int j = 0; j < nov; j++) {
-      if (my_x[j] == 0) {
+      if (x[j] == 0) {
         zero_num++;
       } else {
-        prod *= my_x[j];  //product of the elements in vector 'x'
+        prod *= x[j];  //product of the elements in vector 'x'
       }
     }
     int k;
@@ -83,17 +106,17 @@ double cpu_perman64_sparse(int* cptrs,
       s = ((one << k) & gray) ? 1 : -1;
       
       for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-        if (my_x[rows[j]] == 0) {
+        if (x[rows[j]] == 0) {
           zero_num--;
-          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+          x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          prod *= x[rows[j]];  //product of the elements in vector 'x'
         } else {
-          prod /= my_x[rows[j]];
-          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          if (my_x[rows[j]] == 0) {
+          prod /= x[rows[j]];
+          x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          if (x[rows[j]] == 0) {
             zero_num++;
           } else {
-            prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+            prod *= x[rows[j]];  //product of the elements in vector 'x'
           }
         }
       }
@@ -105,129 +128,21 @@ double cpu_perman64_sparse(int* cptrs,
       i++;
     }
 
-    #pragma omp atomic
+    #pragma omp critical
       p += my_p;
   }
+  
+  
+  //double duration = omp_get_wtime() - starttime;  
+  double perman = (4*(nov&1)-2) * p;
+  //Result result(perman, duration);
 
-  return p;
+  //return result;
+  return perman;
 }
 
-template <class T>
-double cpu_perman64_skipper(int *rptrs,
-			    int *cols,
-			    int* cptrs,
-			    int* rows,
-			    T* cvals,
-			    double x[],
-			    int nov,
-			    long long start,
-			    long long end,
-			    int threads) {
-  //first initialize the vector then we will copy it to ourselves
-  double p;
-  int j, ptr;
-  unsigned long long ci, chunk_size;
-  double change_j;
-  
-  p = 0;
-
-  int no_chunks = 512;
-  chunk_size = (end - start + 1) / no_chunks + 1;
-
-  #pragma omp parallel num_threads(threads) private(j, ci, change_j) 
-  {
-    double my_x[nov];
-    
-    #pragma omp for schedule(dynamic, 1)
-      for(int cid = 0; cid < no_chunks; cid++) {
-      //    int tid = omp_get_thread_num();
-        unsigned long long my_start = start + cid * chunk_size;
-        unsigned long long my_end = min(start + ((cid+1) * chunk_size), end);
-      
-        //update if neccessary
-        double my_p = 0;
-        
-        unsigned long long my_gray;    
-        unsigned long long my_prev_gray = 0;
-        memcpy(my_x, x, sizeof(double) * nov);
-
-        int ptr, last_zero;
-        unsigned long long period, steps, step_start;
-        
-        unsigned long long i = my_start;
-        
-        while (i < my_end) {
-          //k = __builtin_ctzll(i + 1);
-          my_gray = i ^ (i >> 1);
-          
-          unsigned long long gray_diff = my_prev_gray ^ my_gray;
-          
-          j = 0;
-          while(gray_diff > 0) { // this contains the bit to be updated
-            unsigned long long onej = 1ULL << j;
-            if(gray_diff & onej) { // if bit l is changed 
-              gray_diff ^= onej;   // unset bit
-              if(my_gray & onej) {    // do the update
-                for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
-                  my_x[rows[ptr]] += cvals[ptr];
-                }
-              }
-              else {
-                for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
-                  my_x[rows[ptr]] -= cvals[ptr];
-                }
-              }
-            }
-            j++;
-          }
-          //counter++;
-          my_prev_gray = my_gray;
-          last_zero = -1;
-          double my_prod = 1; 
-          for(j = nov - 1; j >= 0; j--) {
-            my_prod *= my_x[j];
-            if(my_x[j] == 0) {
-              last_zero = j;
-              break;
-            }
-          }
-  
-          if(my_prod != 0) {
-            my_p += ((i&1ULL)? -1.0:1.0) * my_prod;
-            i++;
-          } 
-          else {
-            change_j = -1;
-            for (ptr = rptrs[last_zero]; ptr < rptrs[last_zero + 1]; ptr++) {
-              step_start = 1ULL << cols[ptr]; 
-              period = step_start << 1; 
-              ci = step_start;
-              if(i >= step_start) {
-                steps = (i - step_start) / period;
-                ci = step_start + ((steps + 1) * period);
-              }
-              if(ci < change_j) {
-                change_j = ci;
-              }
-            }
-      
-            i++;
-            if(change_j > i) {
-              i = change_j;
-            } 
-          }
-        }
-      
-        #pragma omp critical
-          p += my_p;
-      }
-  }
-    
-  return p;
-}
 
 //Unary functions for cudaOccupancyMaxPotentialBlockSizeVariableSmem
-
 int xshared_sparse_sharedmem(int b){
   return glob_nov*b*glob_sizeof_c;
 }
@@ -1200,8 +1115,9 @@ template <class C, class S>
   printf("==SC== Grid dim is set to : %d \n", grid_dim);
   printf("==SC== Block dim is set to : %d \n", block_dim);
 
-  printf("Calculation bytes: %d -- %d\n", sizeof(p), sizeof(C));
-  printf("Storage bytes: %d -- %d \n", sizeof(mat[0]), sizeof(S));
+
+  //printf("Calculation bytes: %d -- %d\n", sizeof(p), sizeof(C));
+  //printf("Storage bytes: %d -- %d \n", sizeof(mat[0]), sizeof(S));
 
   if(grid_dim_multip != 1){
     grid_dim*=grid_dim_multip;
@@ -1417,46 +1333,59 @@ template <class C, class S>
 }
 
 
-//Returning double, is another problem ?
-//What if we have a really big integer ?
 //Moreover, hybrid approach designed really very bad, need to restucture this function
-template <class T>
-extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(DenseMatrix<T>* densemat, SparseMatrix<T>* sparsemat, flags flags) {
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags flags) {
 
   //Pack parameters
-  T* mat = densemat->mat;
+  S* mat = densemat->mat;
   int* cptrs = sparsemat->cptrs;
   int* rows = sparsemat->rows;
-  T* cvals = sparsemat->cvals;
+  S* cvals = sparsemat->cvals;
   int nov = sparsemat->nov;
   //Pack parameters
 
   //Pack flags
-  int grid_dim = flags.grid_dim;
-  int block_dim = flags.block_dim;  
+  //int grid_dim = flags.grid_dim;
+  //int block_dim = flags.block_dim;  
   int gpu_num = flags.gpu_num;
   bool cpu = flags.cpu;
   int threads = flags.threads;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
   //Pack flags
- 
-  
-  T x[nov]; 
-  T rs; //row sum
-  T p = 1; //product of the elements in vector 'x'
-  
-  double p_partial[gpu_num+1]; //This is only used while calculating return value
-  
-  for (int id = 0; id < gpu_num+1; id++) {
-    p_partial[id] = 0;
+
+  cudaDeviceProp* props = new cudaDeviceProp[gpu_num];
+  for(int i = 0; i < gpu_num; i++){
+    cudaGetDeviceProperties(&props[i], device_id);
+    printf("===SC=== Using Device: %d -- %s \n", i, props[i].name); //Just print this for every GPU we have
   }
 
-  int number_of_chunks = 1;
-  for (int i = 30; i < nov; i++) {
+  double starttime = omp_get_wtime();
+  
+  int gpu_driver_threads = gpu_num;
+  int calculation_threads = threads - (gpu_num + 1);
+  printf("===SC=== Using %d threads for GPU drivers \n", gpu_driver_threads);
+  printf("===SC=== Using %d threads for calculation \n", calculation_threads);
+  
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+  
+  C p_partial[gpu_num+1]; //This is only used while calculating return value
+  
+  for (int id = 0; id < gpu_num + 1; id++) {
+    p_partial[id] = 0;
+    printf("p_partial[id]: %f \n", (double)p_partial[id]);
+  }
+  
+  unsigned long long number_of_chunks = 1;
+  for (int i = 0; i < nov/4; i++) {
     number_of_chunks *= 2;
   }
-  int chunk_id = 0;
   
-  int total = 0;
+  int total = 0; //?
   //create the x vector and initiate the permanent
   for (int j = 0; j < nov; j++) {
     rs = .0f;
@@ -1470,110 +1399,159 @@ extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     p *= x[j];   // product of the elements in vector 'x'
   }
 
+  //For variable smem
+  glob_nov = nov;
+  glob_total = total;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+
+  if((total != densemat->nnz) || (total != densemat->nnz) || (densemat->nnz != sparsemat->nnz)){
+    printf("Some pointers flew away, exiting.. \n");
+    exit(1);
+  }
+  
   long long start = 1;
   long long end = (1LL << (nov-1));
   long long offset = (end - start) / number_of_chunks;
   
+  unsigned long long curr_chunk = gpu_num;
+
   omp_set_nested(1);
   omp_set_dynamic(0);
-#pragma omp parallel for num_threads(gpu_num+1)
-  for (int id = 0; id < gpu_num+1; id++) {
-    if (id == gpu_num) {
-      if (cpu) {
-	int curr_chunk_id;
-#pragma omp critical 
-	{
-	  curr_chunk_id = chunk_id;
-	  chunk_id++;
-	}
-	while (curr_chunk_id < number_of_chunks) {
-	  double stt = omp_get_wtime();
-	  if (curr_chunk_id == number_of_chunks - 1) {
-	    p_partial[id] += cpu_perman64_sparse(cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), end, threads);
-	  } else {
-	    p_partial[id] += cpu_perman64_sparse(cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset), threads);
-	  }
-	  double enn = omp_get_wtime();
-	  //cout << "ChunkID " << curr_chunk_id << "is DONE by CPU" << " in " << (enn - stt) << endl;
-	  printf("ChunkID %d is DONE by CPU in %f \n", curr_chunk_id, enn-stt);
-#pragma omp critical 
-	  {
-	    curr_chunk_id = chunk_id;
-	    chunk_id++;
-	  }
-	}
-      }
-    } else {
-      cudaSetDevice(id);
+#pragma omp parallel for num_threads(gpu_num + 1) schedule(static, 1)
+  for(int dev = 0; dev < gpu_num + 1; dev++){
+    
+    int tid = omp_get_thread_num();
+    unsigned long long last = (unsigned long long)tid;
+
+    if(tid == gpu_num){//CPU PART
+
+      printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
-      T *d_cvals;
+      while(last < number_of_chunks){
+	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
+	
+	if(last == number_of_chunks - 1){
+	  p_partial[gpu_num] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
+						    (start + last * offset), end);
+	}
+	else{
+	  p_partial[gpu_num] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
+						    (start + last * offset),
+						    (start + (last+1) * offset));
+	}
+#pragma omp atomic update
+	curr_chunk++;
+#pragma omp atomic read
+	last = curr_chunk;
+      }
+    }//CPU PART
+    else{//GPU PART
+      
+      
+      cudaSetDevice(tid);
+      printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
+
+      printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
+      cudaStream_t thread_stream;
+      cudaStreamCreate(&thread_stream);
+
+      int grid_dim = 0;
+      int block_dim = 0;
+
+      cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+						     &block_dim,
+						     &kernel_xshared_coalescing_mshared_sparse<C,S>,
+						     xshared_coalescing_mshared_sparse_sharedmem,
+						     0);
+
+      size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(S);
+
+      printf("==SC== Device: %d -- Grid Dim: %d -- Block Dim: %d -- Shared Per Block: %zu \n", dev, grid_dim, block_dim, size);
+
+      S *d_cvals;
       int *d_cptrs, *d_rows;
-      T *d_x, *d_p;
-      T *h_p = new T[grid_dim * block_dim];
+      C *d_x, *d_p;
+      C *h_p = new C[grid_dim*block_dim];
+
       
-      cudaMalloc( &d_x, (nov) * sizeof(T));
-      cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(T));
-      cudaMalloc( &d_cptrs, (nov + 1) * sizeof(int));
-      cudaMalloc( &d_rows, (total) * sizeof(int));
-      cudaMalloc( &d_cvals, (total) * sizeof(T));
+      cudaMalloc(&d_x, (nov) * sizeof(C));
+      //cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C), thread_stream);
+      cudaMalloc(&d_rows, (total) * sizeof(int));
+      cudaMalloc(&d_cptrs, (nov + 1) * sizeof(int));
+      cudaMalloc(&d_cvals, (total) * sizeof(S));
+
+      cudaMemcpy(d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+      cudaMemcpy(d_cptrs, cptrs, (nov + 1) * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(d_rows, rows, (total) * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(d_cvals, cvals, (total) * sizeof(S), cudaMemcpyHostToDevice);
       
-      cudaMemcpy( d_x, x, (nov) * sizeof(T), cudaMemcpyHostToDevice);
-      cudaMemcpy( d_cptrs, cptrs, (nov + 1) * sizeof(int), cudaMemcpyHostToDevice);
-      cudaMemcpy( d_rows, rows, (total) * sizeof(int), cudaMemcpyHostToDevice);
-      cudaMemcpy( d_cvals, cvals, (total) * sizeof(T), cudaMemcpyHostToDevice);
-      
-      int curr_chunk_id;
-      
-#pragma omp critical 
-      {
-	curr_chunk_id = chunk_id;
-	chunk_id++;
+      while(last < number_of_chunks - 1){
+	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
+	
+	cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
+	
+	if(curr_chunk == number_of_chunks -1){
+	  kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim, block_dim, size, thread_stream>>>(d_cptrs,
+												      d_rows,
+												      d_cvals,
+												      d_x,
+												      d_p,
+												      nov,
+												      total,
+												      (start + last * offset),
+												      end);
+	  cudaStreamSynchronize(thread_stream);
+	}
+	else{
+	  kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim, block_dim, size, thread_stream>>>(d_cptrs,
+												      d_rows,
+												      d_cvals,
+												      d_x,
+												      d_p,
+												      nov,
+												      total,
+												      (start + last * offset),
+												      (start + (last + 1) * offset));
+	  cudaStreamSynchronize(thread_stream);
+	}
+	
+	
+	cudaMemcpy(h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+	cudaFree(d_p);
+	
+	for(int i = 0; i < grid_dim * block_dim; i++){
+	  p_partial[tid] += h_p[i];
+	}
+	
+#pragma omp atomic update
+	curr_chunk++;
+#pragma omp atomic read
+	last = curr_chunk;	
       }
-      
-      int x;
-      while (curr_chunk_id < number_of_chunks) {
-	double stt = omp_get_wtime();
-	if (curr_chunk_id == number_of_chunks - 1) {
-	  //kernel_xshared_coalescing_mshared_sparse<<< grid_dim , block_dim , (nov*block_dim*sizeof(float) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(T)) >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + curr_chunk_id*offset), end);
-	  x = 1;
-	} else {
-	  //kernel_xshared_coalescing_mshared_sparse<<< grid_dim , block_dim , (nov*block_dim*sizeof(float) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(T)) >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset));
-	  x = 2;
-	}
-	cudaDeviceSynchronize();
-	double enn = omp_get_wtime();
-	//cout << "ChunkID " << curr_chunk_id << "is DONE by kernel" << id << " in " << (enn - stt) << endl;
-	//printf("ChunkID %d is DONE by kernel %d in %f \n", curr_chunk_id, id, enn-stt);
-        
-	cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(double), cudaMemcpyDeviceToHost);
-        
-	for (int i = 0; i < grid_dim * block_dim; i++) {
-	  p_partial[id] += (double)h_p[i];
-	}
-        
-#pragma omp critical 
-	{
-	  curr_chunk_id = chunk_id;
-	  chunk_id++;
-	}
-      }
-      
+
       cudaFree(d_x);
-      cudaFree(d_p);
       cudaFree(d_cptrs);
       cudaFree(d_rows);
       cudaFree(d_cvals);
-      delete[] h_p;
-    }
+      
+    }//GPU PART
   }
-  
   double return_p = p;
   
-  for (int id = 0; id < gpu_num+1; id++) {
-    return_p += p_partial[id];
+  for (int dev = 0; dev < gpu_num+1; dev++) {
+    return_p += p_partial[dev];
+    printf("p_partial[%d]: %f \n", dev, (double)p_partial[dev]);
   }
+
+  //delete p_partial;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
   
-  return((4*(nov&1)-2) * return_p);
+  //return((4*(nov&1)-2) * return_p);
 }
 
 template <class C, class S>
@@ -1765,12 +1743,15 @@ extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper
             curr_chunk_id = chunk_id;
             chunk_id++;
           }
+	  int x;
           while (curr_chunk_id < number_of_chunks) {
             double stt = omp_get_wtime();
             if (curr_chunk_id == number_of_chunks - 1) {
-              p_partial[id] += cpu_perman64_skipper(rptrs, cols, cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), end, threads);
+              //p_partial[id] += cpu_perman64_skipper(rptrs, cols, cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), end, threads);
+	      x = 1;
             } else {
-              p_partial[id] += cpu_perman64_skipper(rptrs, cols, cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset), threads);
+              //p_partial[id] += cpu_perman64_skipper(rptrs, cols, cptrs, rows, cvals, x, nov, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset), threads);
+	      x = 2;
             }
             double enn = omp_get_wtime();
             //cout << "ChunkID " << curr_chunk_id << "is DONE by CPU" << " in " << (enn - stt) << endl;
@@ -2026,10 +2007,14 @@ template extern Result gpu_perman64_xshared_coalescing_mshared_multigpu_sparse<f
 template extern Result gpu_perman64_xshared_coalescing_mshared_multigpu_sparse<double, double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
 /////
 
-
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+/////
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float, float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<float, double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+/////
 
 template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
 template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);

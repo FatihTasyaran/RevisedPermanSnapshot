@@ -1045,6 +1045,9 @@ Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S
       int nov2;
       d34compress(densemat->mat, densemat->nov, mat2, nov2, minDeg);
       DenseMatrix<S>* densemat2 = create_densematrix_from_mat2(mat2, nov2);
+      //Don't forget realign compressed matrices features
+      densemat->nnz = getNnz(densemat->mat, densemat->nov);
+      sparsemat = create_sparsematrix_from_densemat2(densemat, flags);
       densemat2->nnz = getNnz(densemat2->mat, densemat2->nov);
       SparseMatrix<S>* sparsemat2 = create_sparsematrix_from_densemat2(densemat2, flags);
       

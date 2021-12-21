@@ -1664,27 +1664,26 @@ int main (int argc, char **argv)
 #endif
     
     for(int i = 0; i < flags.rep; i++){
-      //std::cout << "i: " << i << std::endl;
-      //print_float_densematrix(densemat);
-      
-      Result result;
 
+      Result result;
+            
+      DenseMatrix<double>* copy_densemat = copy_dense(densemat);
+      SparseMatrix<double>* copy_sparsemat = copy_sparse(sparsemat);
+      
       if(scaling_chosen){
-	DenseMatrix<double>* copy_densemat = copy_dense(densemat);
-	SparseMatrix<double>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	//delete copy_densemat;
-	//delete copy_sparsemat;
 	flags.type = "double"; //In case if scale_and_calculate change it
       }
-
+      
       else{
 	if(flags.compression)
-	  result = compress_singleton_and_then_recurse(densemat, sparsemat, flags);
+	  result = compress_singleton_and_then_recurse(copy_densemat, copy_sparsemat, flags);
 	else
-	  result = RunAlgo(densemat, sparsemat, flags, false);
+	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       }
       printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      delete copy_densemat;
+      delete copy_sparsemat;
     }
   }
 
@@ -1734,8 +1733,6 @@ int main (int argc, char **argv)
     print_densematrix(densemat);
 #endif
 
-    Result result;
-
     print_flags(flags);
 
     bool scaling_chosen = 0;
@@ -1751,13 +1748,20 @@ int main (int argc, char **argv)
     //and it already does not require scaling for accurate result
     
     for(int i = 0; i < flags.rep; i++){
+
+      Result result;
+      
+      DenseMatrix<__float128>* copy_densemat = copy_dense(densemat);
+      SparseMatrix<__float128>* copy_sparsemat = copy_sparse(sparsemat);
       
       if(flags.compression)
-	result = compress_singleton_and_then_recurse(densemat, sparsemat, flags);
+	result = compress_singleton_and_then_recurse(copy_densemat, copy_sparsemat, flags);
       else
-	result = RunAlgo(densemat, sparsemat, flags, false);
+	result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       
       printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      delete copy_densemat;
+      delete copy_sparsemat;
     }
   }
   
@@ -1819,24 +1823,25 @@ int main (int argc, char **argv)
     for(int i = 0; i < flags.rep; i++){
       Result result;
 
+      DenseMatrix<float>* copy_densemat = copy_dense(densemat);
+      SparseMatrix<float>* copy_sparsemat = copy_sparse(sparsemat);
+      
       if(scaling_chosen){
-	//result = scale_and_calculate(densemat, sparsemat, flags);
-	DenseMatrix<float>* copy_densemat = copy_dense(densemat);
-	SparseMatrix<float>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	//delete copy_densemat;
-	//delete copy_sparsemat;
 	flags.type = "float";//In case if scale_and_calculate change it
       }
 
       else{
       
 	if(flags.compression)
-	  result = compress_singleton_and_then_recurse(densemat, sparsemat, flags);
+	  result = compress_singleton_and_then_recurse(copy_densemat, copy_sparsemat, flags);
 	else
-	  result = RunAlgo(densemat, sparsemat, flags, false);
+	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
+	
       }
       printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      delete copy_densemat;
+      delete copy_sparsemat;
     }
   }
   
@@ -1895,24 +1900,24 @@ int main (int argc, char **argv)
 #endif
     for(int i = 0; i < flags.rep; i++){
       Result result;
-        
+
+      DenseMatrix<int>* copy_densemat = copy_dense(densemat);
+      SparseMatrix<int>* copy_sparsemat = copy_sparse(sparsemat);
+      
       if(scaling_chosen){
-	//result = scale_and_calculate(densemat, sparsemat, flags);
-	DenseMatrix<int>* copy_densemat = copy_dense(densemat);
-	SparseMatrix<int>* copy_sparsemat = copy_sparse(sparsemat);
 	result = scale_and_calculate(copy_densemat, copy_sparsemat, flags, false);
-	//delete copy_densemat;
-	//delete copy_sparsemat;
 	flags.type = "int";
       }
       
       else{
 	if(flags.compression)
-	  result = compress_singleton_and_then_recurse(densemat, sparsemat, flags);
+	  result = compress_singleton_and_then_recurse(copy_densemat, copy_sparsemat, flags);
 	else
-	  result = RunAlgo(densemat, sparsemat, flags, false);
+	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       }
       printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      delete copy_densemat;
+      delete copy_sparsemat;
     }
   }
   

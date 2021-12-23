@@ -1364,6 +1364,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   double starttime = omp_get_wtime();
   
   int gpu_driver_threads = gpu_num;
+  int if_cpu = (int)cpu; //1 thread will be responsible for launching cpu kernel if cpu is chosen
   int calculation_threads = threads - (gpu_num + 1);
   printf("===SC=== Using %d threads for GPU drivers \n", gpu_driver_threads);
   printf("===SC=== Using %d threads for calculation \n", calculation_threads);
@@ -1373,9 +1374,11 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   C rs; //row sum
   C p = 1; //product of the elements in vector 'x'
   
-  C p_partial[gpu_num+1]; //This is only used while calculating return value
+  C p_partial[gpu_num+if_cpu]; //This is only used while calculating return value
+
+  printf("if_cpu: %d \n", if_cpu);
   
-  for (int id = 0; id < gpu_num + 1; id++) {
+  for (int id = 0; id < gpu_num + if_cpu; id++) {
     p_partial[id] = 0;
     printf("p_partial[id]: %f \n", (double)p_partial[id]);
   }
@@ -1414,15 +1417,18 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   long long end = (1LL << (nov-1));
   long long offset = (end - start) / number_of_chunks;
   
-  unsigned long long curr_chunk = gpu_num;
+  unsigned long long curr_chunk = 0;
 
+  
   omp_set_nested(1);
   omp_set_dynamic(0);
-#pragma omp parallel for num_threads(gpu_num + 1) schedule(static, 1)
-  for(int dev = 0; dev < gpu_num + 1; dev++){
+#pragma omp parallel for num_threads(gpu_num + if_cpu) schedule(static, 1)
+  for(int dev = 0; dev < gpu_num + if_cpu; dev++){
     
     int tid = omp_get_thread_num();
-    unsigned long long last = (unsigned long long)tid;
+    int nt = omp_get_num_threads();
+    unsigned long long last = tid;
+
 
     if(tid == gpu_num){//CPU PART
 
@@ -1450,9 +1456,9 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       
       
       cudaSetDevice(tid);
-      printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
+      //printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
 
-      printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
+      //printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
       cudaStream_t thread_stream;
       cudaStreamCreate(&thread_stream);
 
@@ -1467,7 +1473,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 
       size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(S);
 
-      printf("==SC== Device: %d -- Grid Dim: %d -- Block Dim: %d -- Shared Per Block: %zu \n", dev, grid_dim, block_dim, size);
+      //printf("==SC== Device: %d -- Grid Dim: %d -- Block Dim: %d -- Shared Per Block: %zu \n", dev, grid_dim, block_dim, size);
 
       S *d_cvals;
       int *d_cptrs, *d_rows;
@@ -1486,12 +1492,13 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       cudaMemcpy(d_rows, rows, (total) * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(d_cvals, cvals, (total) * sizeof(S), cudaMemcpyHostToDevice);
       
-      while(last < number_of_chunks - 1){
+      while(last < number_of_chunks){
 	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
 	
 	cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
 	
 	if(curr_chunk == number_of_chunks -1){
+	  printf("Ending with gpu, dev: %d \n", tid);
 	  kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim, block_dim, size, thread_stream>>>(d_cptrs,
 												      d_rows,
 												      d_cvals,
@@ -1539,7 +1546,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   }
   double return_p = p;
   
-  for (int dev = 0; dev < gpu_num+1; dev++) {
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
     return_p += p_partial[dev];
     printf("p_partial[%d]: %f \n", dev, (double)p_partial[dev]);
   }

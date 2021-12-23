@@ -62,7 +62,7 @@ template <class C,class S>
   
   long long chunk_size = end / threads + 1;
 
-  printf("Should run with %d threads.. \n", threads);
+  //printf("Should run with %d threads.. \n", threads);
   #pragma omp parallel num_threads(threads) firstprivate(x)
   { 
     int tid = omp_get_thread_num();
@@ -1424,6 +1424,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     lasts[i] = false;
   }
 
+  bool only = true;
   
   omp_set_nested(1);
   omp_set_dynamic(0);
@@ -1434,10 +1435,11 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     int nt = omp_get_num_threads();
     unsigned long long last = tid;
     
-    
-    if(tid == gpu_num){//CPU PART
+
+    //Problem is with the CPU kernel, just need to correct cpu_sparser and especially this x[] part
+    if(tid == gpu_num || only){//CPU PART
       
-      printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
+      //printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
       while(last < number_of_chunks){
 	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
@@ -1451,6 +1453,8 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 						    (start + last * offset),
 						    (start + (last+1) * offset));
 	}
+
+	lasts[last] = !lasts[last];
 	
 #pragma omp atomic update
 	curr_chunk++;

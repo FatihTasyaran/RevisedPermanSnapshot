@@ -1417,7 +1417,12 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   long long end = (1LL << (nov-1));
   long long offset = (end - start) / number_of_chunks;
   
-  unsigned long long curr_chunk = 0;
+  unsigned long long curr_chunk = gpu_num + if_cpu - 1;
+  ///
+  bool lasts[number_of_chunks];
+  for(int i = 0; i < number_of_chunks; i++){
+    lasts[i] = false;
+  }
 
   
   omp_set_nested(1);
@@ -1428,10 +1433,10 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     int tid = omp_get_thread_num();
     int nt = omp_get_num_threads();
     unsigned long long last = tid;
-
-
+    
+    
     if(tid == gpu_num){//CPU PART
-
+      
       printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
       while(last < number_of_chunks){
@@ -1446,6 +1451,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 						    (start + last * offset),
 						    (start + (last+1) * offset));
 	}
+	
 #pragma omp atomic update
 	curr_chunk++;
 #pragma omp atomic read
@@ -1453,7 +1459,6 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       }
     }//CPU PART
     else{//GPU PART
-      
       
       cudaSetDevice(tid);
       //printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
@@ -1497,7 +1502,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 	
 	cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
 	
-	if(curr_chunk == number_of_chunks -1){
+	if(last == number_of_chunks -1){
 	  printf("Ending with gpu, dev: %d \n", tid);
 	  kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim, block_dim, size, thread_stream>>>(d_cptrs,
 												      d_rows,
@@ -1530,11 +1535,13 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 	for(int i = 0; i < grid_dim * block_dim; i++){
 	  p_partial[tid] += h_p[i];
 	}
+
+	lasts[last] = !lasts[last];
 	
 #pragma omp atomic update
 	curr_chunk++;
 #pragma omp atomic read
-	last = curr_chunk;	
+	last = curr_chunk;
       }
 
       cudaFree(d_x);
@@ -1549,6 +1556,11 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
     return_p += p_partial[dev];
     printf("p_partial[%d]: %f \n", dev, (double)p_partial[dev]);
+  }
+
+  for(int i = 0; i < number_of_chunks; i++){
+    if(!lasts[i])
+      printf("lasts[%d] is weird! \n", i);
   }
 
   //delete p_partial;

@@ -22,10 +22,23 @@ int getNnz(S* mat2, int nov2){
   return nnz2;
 }
 
+template<class C>
+void print_x(C* x, int nov){
+
+  printf("###################\n");
+  printf("Printing x: \n");
+  for(int i = 0; i < nov; i++){
+    printf("%f ", (double)x[i]);
+  }
+  printf("\n");
+  printf("###################\n");
+  
+}
+
 
 //Need to be tailored for hybrid setting
 template <class C,class S>
-  double cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C xx[], long long start, long long end) {
+  double cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C* x, long long start, long long end) {
   
   //Pack parameters//
   S* mat = densemat->mat;
@@ -35,42 +48,37 @@ template <class C,class S>
   int nov = sparsemat->nov;
   //Pack parameters//
   
-  double starttime = omp_get_wtime();
+  C p = 0; //product of the elements in vector 'x'
   
-  C x[nov];   
-  C rs; //row sum
-  C p = 1; //product of the elements in vector 'x'
+  //print_x(x, nov);
 
-#ifdef DTYPE
-  cout << "First letter of calculation type " << typeid(p).name() << endl;
-  cout << "First letter of storage type " << typeid(mat[0]).name() << endl;
-#endif
-  
-  //create the x vector and initiate the permanent
-  for (int j = 0; j < nov; j++) {
-    rs = .0f;
-    for (int k = 0; k < nov; k++) {
-      rs += mat[(j * nov) + k];  // sum of row j
-    }
-    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
-    p *= x[j];   // product of the elements in vector 'x'
-  }
-  
   long long one = 1;
   //long long start = 1;
   //long long end = (1LL << (nov-1));
-  
-  long long chunk_size = end / threads + 1;
 
+  long long chunk_size = (end - start) / threads;
+  printf("threads %d -- start: %llu - end: %llu - chunk_size: %llu \n", threads, start, end, chunk_size);
+  
   //printf("Should run with %d threads.. \n", threads);
-  #pragma omp parallel num_threads(threads) firstprivate(x)
+#pragma omp parallel num_threads(threads) 
   { 
     int tid = omp_get_thread_num();
     long long my_start = start + tid * chunk_size;
     long long my_end = min(start + ((tid+1) * chunk_size), end);
     
+#pragma omp critical
+    {
+      printf("I'm thread: %d -- my start: %llu - my end: %llu \n", tid, my_start, my_end);
+    }
+    
+    C my_x[nov];
+    
+    for(int i = 0; i < nov; i++){
+      my_x[i] = x[i];
+    }
+    
     C s;  //+1 or -1 
-    C prod; //product of the elements in vector 'x'
+    C prod = 1.0; //product of the elements in vector 'x'
     C my_p = 0;
     long long i = my_start;
     long long gray = (i-1) ^ ((i-1) >> 1);
@@ -78,18 +86,17 @@ template <class C,class S>
     for (int k = 0; k < (nov-1); k++) {
       if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
         for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-          x[rows[j]] += cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          my_x[rows[j]] += cvals[j]; // see Nijenhuis and Wilf - update x vector entries
         }
       }
     }
-
-    prod = 1.0;
+    
     int zero_num = 0;
     for (int j = 0; j < nov; j++) {
-      if (x[j] == 0) {
+      if (my_x[j] == 0) {
         zero_num++;
       } else {
-        prod *= x[j];  //product of the elements in vector 'x'
+        prod *= my_x[j];  //product of the elements in vector 'x'
       }
     }
     int k;
@@ -106,17 +113,17 @@ template <class C,class S>
       s = ((one << k) & gray) ? 1 : -1;
       
       for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-        if (x[rows[j]] == 0) {
+        if (my_x[rows[j]] == 0) {
           zero_num--;
-          x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          prod *= x[rows[j]];  //product of the elements in vector 'x'
+          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          prod *= my_x[rows[j]];  //product of the elements in vector 'x'
         } else {
-          prod /= x[rows[j]];
-          x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+          prod /= my_x[rows[j]];
+          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
           if (x[rows[j]] == 0) {
             zero_num++;
           } else {
-            prod *= x[rows[j]];  //product of the elements in vector 'x'
+            prod *= my_x[rows[j]];  //product of the elements in vector 'x'
           }
         }
       }
@@ -128,17 +135,20 @@ template <class C,class S>
       i++;
     }
 
-    #pragma omp critical
+#pragma omp critical
+    {
+      printf("I'm thread, %d , my_p: %f \n", tid, (double)my_p);
       p += my_p;
+    }
   }
   
-  
-  //double duration = omp_get_wtime() - starttime;  
-  double perman = (4*(nov&1)-2) * p;
+  printf("CPU returning: %f \n", (double)p);
+  return p;
+  //double perman = (4*(nov&1)-2) * p;
   //Result result(perman, duration);
 
   //return result;
-  return perman;
+  //return perman;
 }
 
 
@@ -1362,25 +1372,27 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   }
 
   double starttime = omp_get_wtime();
-  
   int gpu_driver_threads = gpu_num;
-  int if_cpu = (int)cpu; //1 thread will be responsible for launching cpu kernel if cpu is chosen
-  int calculation_threads = threads - (gpu_num + 1);
+  int calculation_threads = threads - (gpu_num);
   printf("===SC=== Using %d threads for GPU drivers \n", gpu_driver_threads);
   printf("===SC=== Using %d threads for calculation \n", calculation_threads);
-  
+  if(calculation_threads < 1){
+    printf("===WARNING=== No calculation threads left for CPU \n");
+    cpu = false;
+  }
+  int if_cpu = (int)cpu; //1 thread will be responsible for launching cpu kernel if cpu is chosen
   
   C x[nov]; 
   C rs; //row sum
   C p = 1; //product of the elements in vector 'x'
   
-  C p_partial[gpu_num+if_cpu]; //This is only used while calculating return value
+  C p_partial[gpu_num + if_cpu]; //This is only used while calculating return value
 
   printf("if_cpu: %d \n", if_cpu);
   
   for (int id = 0; id < gpu_num + if_cpu; id++) {
     p_partial[id] = 0;
-    printf("p_partial[id]: %f \n", (double)p_partial[id]);
+    //printf("p_partial[id]: %f \n", (double)p_partial[id]);
   }
   
   unsigned long long number_of_chunks = 1;
@@ -1428,6 +1440,9 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   
   omp_set_nested(1);
   omp_set_dynamic(0);
+
+  //print_x(x, nov);
+
 #pragma omp parallel for num_threads(gpu_num + if_cpu) schedule(static, 1)
   for(int dev = 0; dev < gpu_num + if_cpu; dev++){
     
@@ -1435,25 +1450,26 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     int nt = omp_get_num_threads();
     unsigned long long last = tid;
     
-
+    
     //Problem is with the CPU kernel, just need to correct cpu_sparser and especially this x[] part
-    if(tid == gpu_num || only){//CPU PART
+    if(tid == gpu_num){//CPU PART
       
-      //printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
+      printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
       while(last < number_of_chunks){
-	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
+	printf("tid: %d last: %llu / %llu -- start: %d - end: %d \n", tid, last, number_of_chunks,
+	       (start + last * offset), (start + (last+1) * offset));
 	
 	if(last == number_of_chunks - 1){
-	  p_partial[gpu_num] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
-						    (start + last * offset), end);
+	  p_partial[tid] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
+						(start + last * offset), end);
 	}
 	else{
-	  p_partial[gpu_num] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
-						    (start + last * offset),
-						    (start + (last+1) * offset));
+	  p_partial[tid] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
+						(start + last * offset),
+						(start + (last+1) * offset));
 	}
-
+	
 	lasts[last] = !lasts[last];
 	
 #pragma omp atomic update
@@ -1467,7 +1483,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       cudaSetDevice(tid);
       //printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
 
-      //printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
+      printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
       cudaStream_t thread_stream;
       cudaStreamCreate(&thread_stream);
 

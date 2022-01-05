@@ -56,15 +56,18 @@ template <class C,class S>
   //long long start = 1;
   //long long end = (1LL << (nov-1));
 
-  long long chunk_size = (end - start) / threads;
-  printf("threads %d -- start: %llu - end: %llu - chunk_size: %llu \n", threads, start, end, chunk_size);
+  long long unsigned chunk_size = (end - start) / threads;
+  //printf("threads %d -- start: %llu - end: %llu - chunk_size: %llu \n", threads, start, end, chunk_size);
   
   //printf("Should run with %d threads.. \n", threads);
 #pragma omp parallel num_threads(threads) 
   { 
     int tid = omp_get_thread_num();
-    long long my_start = start + tid * chunk_size;
-    long long my_end = min(start + ((tid+1) * chunk_size), end);
+    long long unsigned my_start = start + tid * chunk_size;
+    //long long unsigned my_end = min(start + ((tid+1) * chunk_size), end);
+    long long unsigned my_end = start + (tid+1) * chunk_size;
+    if(tid == threads-1)
+      my_end = end;
     
 #pragma omp critical
     {
@@ -120,7 +123,7 @@ template <class C,class S>
         } else {
           prod /= my_x[rows[j]];
           my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          if (x[rows[j]] == 0) {
+          if (my_x[rows[j]] == 0) {
             zero_num++;
           } else {
             prod *= my_x[rows[j]];  //product of the elements in vector 'x'
@@ -134,15 +137,15 @@ template <class C,class S>
       prodSign *= -1;
       i++;
     }
-
+    
 #pragma omp critical
     {
-      printf("I'm thread, %d , my_p: %f \n", tid, (double)my_p);
+      //printf("I'm thread, %d , my_p: %f \n", tid, (double)my_p);
       p += my_p;
     }
   }
   
-  printf("CPU returning: %f \n", (double)p);
+  printf("CPU returning: %.16f \n", p);
   return p;
   //double perman = (4*(nov&1)-2) * p;
   //Result result(perman, duration);
@@ -1425,9 +1428,9 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     exit(1);
   }
   
-  long long start = 1;
-  long long end = (1LL << (nov-1));
-  long long offset = (end - start) / number_of_chunks;
+  unsigned long long start = 1;
+  unsigned long long end = (1LL << (nov-1));
+  unsigned long long offset = (end - start) / number_of_chunks;
   
   unsigned long long curr_chunk = gpu_num + if_cpu - 1;
   ///
@@ -1457,7 +1460,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
       while(last < number_of_chunks){
-	printf("tid: %d last: %llu / %llu -- start: %d - end: %d \n", tid, last, number_of_chunks,
+	printf("tid: %d last: %llu / %llu -- Start: %llu - End: %llu \n", tid, last, number_of_chunks,
 	       (start + last * offset), (start + (last+1) * offset));
 	
 	if(last == number_of_chunks - 1){
@@ -1575,7 +1578,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   
   for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
     return_p += p_partial[dev];
-    printf("p_partial[%d]: %f \n", dev, (double)p_partial[dev]);
+    printf("p_partial[%d]: %.16f \n", dev, p_partial[dev]);
   }
 
   for(int i = 0; i < number_of_chunks; i++){

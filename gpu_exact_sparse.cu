@@ -69,10 +69,10 @@ template <class C,class S>
     if(tid == threads-1)
       my_end = end;
     
-#pragma omp critical
-    {
-      printf("I'm thread: %d -- my start: %llu - my end: %llu \n", tid, my_start, my_end);
-    }
+    //#pragma omp critical
+    //{
+    //printf("I'm thread: %d -- my start: %llu - my end: %llu \n", tid, my_start, my_end);
+    //}
     
     C my_x[nov];
     
@@ -103,7 +103,7 @@ template <class C,class S>
       }
     }
     int k;
-
+    
     int prodSign = 1;
     if(i & 1LL) {
       prodSign = -1;
@@ -130,7 +130,7 @@ template <class C,class S>
           }
         }
       }
-
+      
       if(zero_num == 0) {
         my_p += prodSign * prod; 
       }
@@ -145,11 +145,11 @@ template <class C,class S>
     }
   }
   
-  printf("CPU returning: %.16f \n", p);
+  //printf("CPU returning: %.16f \n", p);
   return p;
   //double perman = (4*(nov&1)-2) * p;
   //Result result(perman, duration);
-
+  
   //return result;
   //return perman;
 }
@@ -1434,12 +1434,12 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   
   unsigned long long curr_chunk = gpu_num + if_cpu - 1;
   ///
-  bool lasts[number_of_chunks];
-  for(int i = 0; i < number_of_chunks; i++){
-    lasts[i] = false;
-  }
+  //bool lasts[number_of_chunks];
+  //for(int i = 0; i < number_of_chunks; i++){
+  //lasts[i] = false;
+  //}
 
-  bool only = true;
+  //bool only = true;
   
   omp_set_nested(1);
   omp_set_dynamic(0);
@@ -1457,11 +1457,10 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     //Problem is with the CPU kernel, just need to correct cpu_sparser and especially this x[] part
     if(tid == gpu_num){//CPU PART
       
-      printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
+      //printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
       
       while(last < number_of_chunks){
-	printf("tid: %d last: %llu / %llu -- Start: %llu - End: %llu \n", tid, last, number_of_chunks,
-	       (start + last * offset), (start + (last+1) * offset));
+	//printf("tid: %d last: %llu / %llu -- Start: %llu - End: %llu \n", tid, last, number_of_chunks, (start + last * offset), (start + (last+1) * offset));
 	
 	if(last == number_of_chunks - 1){
 	  p_partial[tid] += cpu_perman64_sparse(densemat, sparsemat, calculation_threads, x,
@@ -1473,7 +1472,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 						(start + (last+1) * offset));
 	}
 	
-	lasts[last] = !lasts[last];
+	//lasts[last] = !lasts[last];
 	
 #pragma omp atomic update
 	curr_chunk++;
@@ -1486,7 +1485,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       cudaSetDevice(tid);
       //printf("Thread %d running device %d -- %s \n", tid, tid, props[tid].name);
 
-      printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
+      //printf("I'm thread %d, I am running GPU, my last: %llu \n", tid, last);
       cudaStream_t thread_stream;
       cudaStreamCreate(&thread_stream);
 
@@ -1521,12 +1520,12 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
       cudaMemcpy(d_cvals, cvals, (total) * sizeof(S), cudaMemcpyHostToDevice);
       
       while(last < number_of_chunks){
-	printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
+	//printf("tid: %d last: %llu / %llu \n", tid, last, number_of_chunks);
 	
 	cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
 	
 	if(last == number_of_chunks -1){
-	  printf("Ending with gpu, dev: %d \n", tid);
+	  //printf("Ending with gpu, dev: %d \n", tid);
 	  kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim, block_dim, size, thread_stream>>>(d_cptrs,
 												      d_rows,
 												      d_cvals,
@@ -1559,7 +1558,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 	  p_partial[tid] += h_p[i];
 	}
 
-	lasts[last] = !lasts[last];
+	//lasts[last] = !lasts[last];
 	
 #pragma omp atomic update
 	curr_chunk++;
@@ -1578,13 +1577,13 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   
   for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
     return_p += p_partial[dev];
-    printf("p_partial[%d]: %.16f \n", dev, p_partial[dev]);
+    //printf("p_partial[%d]: %.16f \n", dev, p_partial[dev]);
   }
 
-  for(int i = 0; i < number_of_chunks; i++){
-    if(!lasts[i])
-      printf("lasts[%d] is weird! \n", i);
-  }
+//for(int i = 0; i < number_of_chunks; i++){
+//if(!lasts[i])
+//printf("lasts[%d] is weird! \n", i);
+//}
 
   //delete p_partial;
 

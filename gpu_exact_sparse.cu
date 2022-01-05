@@ -1370,7 +1370,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 
   cudaDeviceProp* props = new cudaDeviceProp[gpu_num];
   for(int i = 0; i < gpu_num; i++){
-    cudaGetDeviceProperties(&props[i], device_id);
+    cudaGetDeviceProperties(&props[i], i);
     printf("===SC=== Using Device: %d -- %s \n", i, props[i].name); //Just print this for every GPU we have
   }
 

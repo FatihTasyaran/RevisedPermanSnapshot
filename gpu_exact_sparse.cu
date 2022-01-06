@@ -2062,7 +2062,11 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper
     for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
       return_p += p_partial[dev];
     }
-    
+
+    double perman = (4*(nov&1)-2) * return_p;
+    double duration = omp_get_wtime() - starttime;
+    Result result(perman, duration);
+    return result;
     
 }
 
@@ -2240,9 +2244,13 @@ template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunk
 /////
 
 /////
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float,float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double,float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float,double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double,double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
 /////
 
 /////DEPRECATED

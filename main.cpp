@@ -502,7 +502,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks_skipper";
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper(densemat, sparsemat, flags);
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, S>(densemat, sparsemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, S>(densemat, sparsemat, flags);
     }
     else if (perman_algo == 6) {
 #ifdef DEBUG
@@ -701,7 +704,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks_skipper";
       //This will change accordingly
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper(densemat, sparsemat, flags);
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, S>(densemat, sparsemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, S>(densemat, sparsemat, flags);
   
   }
   

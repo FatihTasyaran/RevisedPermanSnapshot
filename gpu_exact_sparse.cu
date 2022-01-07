@@ -41,7 +41,7 @@ template <class C,class S>
   double cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C* x, long long unsigned start, long long unsigned end) {
   
   //Pack parameters//
-  S* mat = densemat->mat;
+  //S* mat = densemat->mat;
   int* cptrs = sparsemat->cptrs;
   int* rows = sparsemat->rows;
   S* cvals = sparsemat->cvals;
@@ -172,7 +172,8 @@ template <class C, class S>
   //first initialize the vector then we will copy it to ourselves
   
   int j, ptr;
-  unsigned long long ci, start, end, chunk_size;
+  //unsigned long long ci, start, end, chunk_size;
+  unsigned long long ci, chunk_size;
   double change_j;
 
   int no_chunks = threads * 32;
@@ -196,7 +197,8 @@ template <class C, class S>
       unsigned long long my_prev_gray = 0;
       memcpy(my_x, x, sizeof(C) * nov);
       
-      int ptr, last_zero;
+      //int ptr, last_zero;
+      int last_zero;
       unsigned long long period, steps, step_start;
       
       unsigned long long i = my_start;
@@ -1222,11 +1224,11 @@ template <class C, class S>
 
   total = sparsemat->nnz;
 
-  printf("!!Reported by func total: %d \n", getNnz(densemat->mat, nov));  
-  printf("!!Total: %d | Zero: %d | nov*nov: %d!!\n", total, zero, nov*nov);
-  printf("!!total: %d --densemat->nov: %d !!\n", total, densemat->nov);
-  printf("!!total: %d --densemat->nnz: %d !!\n", total, densemat->nnz);
-  printf("!!total: %d --sparsemat->nnz: %d !!\n", total, sparsemat->nnz);
+  //printf("!!Reported by func total: %d \n", getNnz(densemat->mat, nov));  
+  //printf("!!Total: %d | Zero: %d | nov*nov: %d!!\n", total, zero, nov*nov);
+  //printf("!!total: %d --densemat->nov: %d !!\n", total, densemat->nov);
+  //printf("!!total: %d --densemat->nnz: %d !!\n", total, densemat->nnz);
+  //printf("!!total: %d --sparsemat->nnz: %d !!\n", total, sparsemat->nnz);
   
   
   //For variable smem
@@ -1284,7 +1286,7 @@ template <class C, class S>
   
   double stt = omp_get_wtime();
  
-  printf("Just before launch %d -- %d \n", grid_dim, block_dim);
+  //printf("Just before launch %d -- %d \n", grid_dim, block_dim);
   kernel_xshared_coalescing_mshared_sparse<C,S><<<grid_dim , block_dim , size>>>(d_cptrs,
 										 d_rows,
 										 d_cvals,
@@ -1842,7 +1844,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_skipper(DenseMatrix<S>* de
 }
 
 template <class C, class S>
-extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper(DenseMatrix<T>* densemat, SparseMatrix<T>* sparsemat, flags flags) {
+  extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags flags) {
 
   //Pack parameters
   S* mat = densemat->mat;
@@ -1859,7 +1861,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper
   bool cpu = flags.cpu;
   int threads = flags.threads;
   int device_id = flags.device_id;
-  int grid_dim_multip = flags.grid_dim_multip;
+  int grid_dim_multip = flags.grid_multip;
   //Pack flags
 
   cudaDeviceProp* props = new cudaDeviceProp[gpu_num];
@@ -2244,13 +2246,12 @@ template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunk
 /////
 
 /////
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
-
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float,float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double,float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float,double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
-template extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double,double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, int>(DenseMatrix<int>* densemat, SparseMatrix<int>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, float>(DenseMatrix<float>* densemat, SparseMatrix<float>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, double>(DenseMatrix<double>* densemat, SparseMatrix<double>* sparsemat, flags flags);
 /////
 
 /////DEPRECATED

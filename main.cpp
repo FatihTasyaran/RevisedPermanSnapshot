@@ -34,6 +34,7 @@
 
 #include <cfenv>
 
+//#define STRUCTURAL
 //#define HEAVYDEBUG
 
 using namespace std;
@@ -678,6 +679,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
   }
   
   if (gpu && cpu && sparse && exact) {
+    
     if(perman_algo == 7){
       
 #ifdef DEBUG
@@ -693,22 +695,22 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       else
 	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse<double, S>(densemat, sparsemat, flags);
     }
-  }
-  else if(perman_algo == 17){
+    
+    else if(perman_algo == 17){
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_chunks_skipper() \n");
+      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
 #endif
-
+      
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks_skipper";
       //This will change accordingly
       if(flags.calculation_half_precision)
 	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<float, S>(densemat, sparsemat, flags);
       else
 	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper<double, S>(densemat, sparsemat, flags);
-  
+    }
   }
   
   if(gpu && cpu && dense && approximation){

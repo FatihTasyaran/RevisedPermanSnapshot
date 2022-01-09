@@ -365,9 +365,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
       flags.algo_name = "gpu_perman64_xshared_mshared_multigpu";
-      //Will have it's change
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpu(densemat, flags);      
-    } 
+
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpu<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpu<double, S>(densemat, flags);
+    }
     else if (perman_algo == 6) {
 #ifdef DEBUG
       printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distribution() \n");

@@ -1393,9 +1393,9 @@ template <class C, class S>
   {
     
     int gpu_id = omp_get_thread_num();
-    printf("gpu_id: %d \n", gpu_id);
-    printf("cpu thread: %d \n", omp_get_thread_num());
-    printf("no threads: %d \n", omp_get_num_threads());
+    //printf("gpu_id: %d \n", gpu_id);
+    //printf("cpu thread: %d \n", omp_get_thread_num());
+    //printf("no threads: %d \n", omp_get_num_threads());
     cudaSetDevice(gpu_id);
 
     cudaDeviceProp prop;
@@ -1410,11 +1410,14 @@ template <class C, class S>
 
     size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S);
     
-    printf("==SC== Shared memory per block is set to : %zu \n", size);
-    printf("==SC== Grid dim is set to : %d \n", grid_dim);
-    printf("==SC== Block dim is set to : %d \n", block_dim);
+    printf("==SC== Shared memory per block is set to : %zu on %d-%s \n", size, gpu_id, prop.name);
+    printf("==SC== Grid dim is set to : %d on %d-%s \n", grid_dim, gpu_id, prop.name);
+    printf("==SC== Block dim is set to : %d on %d-%s\n", block_dim, gpu_id, prop.name);
 
-    
+    if(grid_dim_multip != 1){
+      grid_dim *= grid_dim_multip;
+      printf("==SC== Grid dim re-set to : %d on %d-%s \n", grid_dim, gpu_id, prop.name);
+    }
     
     S *d_cvals;
     int *d_cptrs, *d_rows;

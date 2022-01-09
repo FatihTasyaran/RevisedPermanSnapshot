@@ -23,12 +23,13 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing_mshared(DenseMatrix<S>* densemat, flags flags);
 
-template <class T>
-extern double gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<T>* densemat, flags flags);
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* densemat, flags flags);
 
 template <class T>
 extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(DenseMatrix<T>* densemat, flags flags);
 
+//Deprecated
 template <class T>
 extern double gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distribution(DenseMatrix<T>* densemat, flags flags);
 //##############~~#####//FUNCTIONS FROM: gpu_exact_dense.cu//#####~~##############//

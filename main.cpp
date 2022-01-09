@@ -1479,7 +1479,7 @@ int main (int argc, char **argv)
 	break;
       case 'l':
 	if(optarg[0] == '-'){
-	  fprintf(stderr, "Option -q requires an argument. \n");
+	  fprintf(stderr, "Option -l requires an argument. \n");
 	  return 1;
 	}
 	flags.device_id = atoi(optarg);

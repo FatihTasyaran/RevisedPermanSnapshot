@@ -8,14 +8,15 @@ static int glob_sizeof_c;
 static int glob_sizeof_s;
 
 //This is a CPU helper kernel for hybrid setting
-template <class T>
-double cpu_perman64(T* mat_t,
-		    double x[],
+template <class C, class S>
+double cpu_perman64(C* mat_t,
+		    C x[],
 		    int nov,
 		    long long start,
 		    long long end,
 		    int threads) {
-  double p = 0; //product of the elements in vector 'x'
+  
+  C p = 0; //product of the elements in vector 'x'
   long long one = 1;
   long long chunk_size = (end - start) / threads + 1;
   omp_set_num_threads(threads);
@@ -977,6 +978,16 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* d
   int grid_dim_multip = flags.grid_multip;
   //Pack flags//
 
+  //Multigpu special//
+  int grid_dims[gpu_num];
+  int block_dims[gpu_num];
+
+  for(int i = 0; i < gpu_num; i++){
+    grid_dims[i] = grid_dim;
+    block_dims[i] = block_dim;
+  }
+  //Multigpu special//
+  
   double starttime = omp_get_wtime();
   
   C x[nov]; 
@@ -987,6 +998,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* d
   for (int gpu_id = 0; gpu_id < gpu_num; gpu_id++) {
     p_partial[gpu_id] = 0;
   }
+  
   
   //create the x vector and initiate the permanent
   for (int j = 0; j < nov; j++) {
@@ -1026,29 +1038,29 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* d
     cudaGetDeviceProperties(&prop, gpu_id);
     printf("==SC== Running on device: %d -- %s \n", gpu_id, prop.name);
     
-    cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
-						   &block_dim,
+    cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dims[gpu_id],
+						   &block_dims[gpu_id],
 						   &kernel_xshared_coalescing_mshared<C,S>,
 						   xshared_coalescing_mshared_sharedmem,
 						   0);
     
-    size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+    size_t size = (nov*block_dims[gpu_id]*sizeof(C) + nov*nov*sizeof(S));
     
     printf("==SC== Shared memory per block is set to : %zu on %d-%s \n", size, gpu_id, prop.name);
-    printf("==SC== Grid dim is set to : %d  on %d-%s \n", grid_dim, gpu_id, prop.name);
-    printf("==SC== Block dim is set to : %d on %d-%s \n", block_dim, gpu_id, prop.name);
+    printf("==SC== Grid dim is set to : %d  on %d-%s \n", grid_dims[gpu_id], gpu_id, prop.name);
+    printf("==SC== Block dim is set to : %d on %d-%s \n", block_dims[gpu_id], gpu_id, prop.name);
     
     if(grid_dim_multip != 1){
-      grid_dim*=grid_dim_multip;
-      printf("==SC== Grid dim is re-set to : %d on %d-%s \n", grid_dim, gpu_id, prop.name);
+      grid_dims[gpu_id]*=grid_dim_multip;
+      printf("==SC== Grid dim is re-set to : %d on %d-%s \n", grid_dims[gpu_id], gpu_id, prop.name);
     }
     
     S *d_mat_t;
     C *d_x, *d_p;
-    C *h_p = new C[grid_dim * block_dim];
+    C *h_p = new C[grid_dims[gpu_id] * block_dims[gpu_id]];
     
     cudaMalloc( &d_x, (nov) * sizeof(C));
-    cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+    cudaMalloc( &d_p, (grid_dims[gpu_id] * block_dims[gpu_id]) * sizeof(C));
     cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
     
     cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
@@ -1056,21 +1068,20 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* d
   
     
     if (gpu_id == gpu_num-1) {
-      kernel_xshared_coalescing_mshared<<< grid_dim , block_dim , size >>> (d_mat_t, d_x, d_p, nov, (start + gpu_id*offset), end);
+      kernel_xshared_coalescing_mshared<<< grid_dims[gpu_id] , block_dims[gpu_id] , size >>> (d_mat_t, d_x, d_p, nov, (start + gpu_id*offset), end);
     }
     else {
-      kernel_xshared_coalescing_mshared<<< grid_dim , block_dim , size >>> (d_mat_t, d_x, d_p, nov, (start + gpu_id*offset), (start + (gpu_id+1)*offset));
+      kernel_xshared_coalescing_mshared<<< grid_dims[gpu_id] , block_dims[gpu_id] , size >>> (d_mat_t, d_x, d_p, nov, (start + gpu_id*offset), (start + (gpu_id+1)*offset));
     }
     cudaDeviceSynchronize();
     
-    cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+    cudaMemcpy( h_p, d_p, grid_dims[gpu_id] * block_dims[gpu_id] * sizeof(C), cudaMemcpyDeviceToHost);
     
     cudaFree(d_mat_t);
     cudaFree(d_x);
     cudaFree(d_p);
 
-    //NOTE THAT: IF GPUs are different, grid_dim and block_dim for each GPU could be different, therefore error
-    for (int i = 0; i < grid_dim * block_dim; i++) {
+    for (int i = 0; i < grid_dims[gpu_id] * block_dims[gpu_id]; i++) {
       p_partial[gpu_id] += h_p[i];
     }
     delete[] h_p;
@@ -1156,12 +1167,15 @@ extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(DenseMa
             curr_chunk_id = chunk_id;
             chunk_id++;
           }
+	  int x;
           while (curr_chunk_id < number_of_chunks) {
             double stt = omp_get_wtime();
             if (curr_chunk_id == number_of_chunks - 1) {
-              p_partial[id] += cpu_perman64(mat_t, x, nov, (start + curr_chunk_id*offset), end, threads);
+              //p_partial[id] += cpu_perman64(mat_t, x, nov, (start + curr_chunk_id*offset), end, threads);
+	      x = 1;
             } else {
-              p_partial[id] += cpu_perman64(mat_t, x, nov, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset), threads);
+              //p_partial[id] += cpu_perman64(mat_t, x, nov, (start + curr_chunk_id*offset), (start + (curr_chunk_id+1)*offset), threads);
+	      x = 2;
             }
             double enn = omp_get_wtime();
 	    printf("ChunkID %d is DONE by CPU in %f \n", curr_chunk_id, enn - stt);
@@ -1238,6 +1252,8 @@ extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(DenseMa
 }
 
 
+
+//DEPRECATED
 template <class T>
 extern double gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distribution(DenseMatrix<T>* densemat, flags flags) {
 

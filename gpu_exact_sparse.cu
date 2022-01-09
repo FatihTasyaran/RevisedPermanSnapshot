@@ -1562,13 +1562,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   unsigned long long offset = (end - start) / number_of_chunks;
   
   unsigned long long curr_chunk = gpu_num + if_cpu - 1;
-  ///
-  //bool lasts[number_of_chunks];
-  //for(int i = 0; i < number_of_chunks; i++){
-  //lasts[i] = false;
-  //}
-
-  //bool only = true;
+  
   
   omp_set_nested(1);
   omp_set_dynamic(0);
@@ -1583,7 +1577,6 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
     unsigned long long last = tid;
     
     
-    //Problem is with the CPU kernel, just need to correct cpu_sparser and especially this x[] part
     if(tid == gpu_num){//CPU PART
       
       //printf("I'm thread %d, I am running CPU, my last: %llu \n", tid, last);
@@ -1629,6 +1622,11 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
 
       size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(S);
 
+      //?
+      if(grid_dim_multip != 1){
+	grid_dim *= grid_dim_multip;
+      }
+      
       //printf("==SC== Device: %d -- Grid Dim: %d -- Block Dim: %d -- Shared Per Block: %zu \n", dev, grid_dim, block_dim, size);
 
       S *d_cvals;

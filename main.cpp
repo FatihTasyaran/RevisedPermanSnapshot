@@ -391,7 +391,11 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
       flags.algo_name = "gpu_perman_xshared_coalescing_mshared_multigpucpu_chunks";
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(densemat, flags);
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks<double, S>(densemat, flags);
     }
     
     else{
@@ -674,10 +678,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks";
-      //This will change accordingly
-      perman = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(densemat, flags);
-	
-      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks<double, S>(densemat, flags);   
     }
   }
   

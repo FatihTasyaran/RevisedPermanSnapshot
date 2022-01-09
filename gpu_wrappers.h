@@ -26,8 +26,8 @@ extern Result gpu_perman64_xshared_coalescing_mshared(DenseMatrix<S>* densemat, 
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing_mshared_multigpu(DenseMatrix<S>* densemat, flags flags);
 
-template <class T>
-extern double gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(DenseMatrix<T>* densemat, flags flags);
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks(DenseMatrix<S>* densemat, flags flags);
 
 //Deprecated
 template <class T>

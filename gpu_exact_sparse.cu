@@ -1385,47 +1385,45 @@ template <class C, class S>
   long long end = (1LL << (nov-1));
   long long offset = (end - start) / gpu_num;
 
-  printf("gpu_num: %d \n", gpu_num);
+  //Multigpu special//
+  int grid_dims[gpu_num];
+  int block_dims[gpu_num];
+  //Multigpu special//
   
-  //#pragma omp parallel for num_threads(gpu_num) schedule(static,1)
-  //for (int gpu_id = 0; gpu_id < gpu_num; gpu_id++) {
 #pragma omp parallel num_threads(gpu_num)
   {
     
     int gpu_id = omp_get_thread_num();
-    //printf("gpu_id: %d \n", gpu_id);
-    //printf("cpu thread: %d \n", omp_get_thread_num());
-    //printf("no threads: %d \n", omp_get_num_threads());
     cudaSetDevice(gpu_id);
 
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, gpu_id);
     printf("==SC== Running on device: %d -- %s \n", gpu_id, prop.name);
 
-    cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
-						   &block_dim,
+    cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dims[gpu_id],
+						   &block_dims[gpu_id],
 						   &kernel_xshared_coalescing_mshared_sparse<C,S>,
 						   xshared_coalescing_mshared_sparse_sharedmem,
 						   0);
 
-    size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S);
+    size_t size = nov*block_dims[gpu_id]*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S);
     
     printf("==SC== Shared memory per block is set to : %zu on %d-%s \n", size, gpu_id, prop.name);
-    printf("==SC== Grid dim is set to : %d on %d-%s \n", grid_dim, gpu_id, prop.name);
-    printf("==SC== Block dim is set to : %d on %d-%s\n", block_dim, gpu_id, prop.name);
+    printf("==SC== Grid dim is set to : %d on %d-%s \n", grid_dims[gpu_id], gpu_id, prop.name);
+    printf("==SC== Block dim is set to : %d on %d-%s\n", block_dims[gpu_id], gpu_id, prop.name);
 
     if(grid_dim_multip != 1){
-      grid_dim *= grid_dim_multip;
-      printf("==SC== Grid dim re-set to : %d on %d-%s \n", grid_dim, gpu_id, prop.name);
+      grid_dims[gpu_id] *= grid_dim_multip;
+      printf("==SC== Grid dim re-set to : %d on %d-%s \n", grid_dims[gpu_id], gpu_id, prop.name);
     }
     
     S *d_cvals;
     int *d_cptrs, *d_rows;
     C *d_x, *d_p;
-    C *h_p = new C[grid_dim * block_dim];
+    C *h_p = new C[grid_dims[gpu_id] * block_dims[gpu_id]];
     
     cudaMalloc( &d_x, (nov) * sizeof(C)); 
-    cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+    cudaMalloc( &d_p, (grid_dims[gpu_id] * block_dims[gpu_id]) * sizeof(C));
     cudaMalloc( &d_cptrs, (nov + 1) * sizeof(int));
     cudaMalloc( &d_rows, (total) * sizeof(int));
     cudaMalloc( &d_cvals, (total) * sizeof(S));
@@ -1439,16 +1437,16 @@ template <class C, class S>
     
     //double stt = omp_get_wtime();
     if (gpu_id == gpu_num-1) {
-      kernel_xshared_coalescing_mshared_sparse<<< grid_dim , block_dim , size >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + gpu_id*offset), end);  
+      kernel_xshared_coalescing_mshared_sparse<<< grid_dims[gpu_id] , block_dims[gpu_id] , size >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + gpu_id*offset), end);  
     } else {
-      kernel_xshared_coalescing_mshared_sparse<<< grid_dim , block_dim , size >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + gpu_id*offset), (start + (gpu_id+1)*offset));
+      kernel_xshared_coalescing_mshared_sparse<<< grid_dims[gpu_id] , block_dims[gpu_id] , size >>> (d_cptrs, d_rows, d_cvals, d_x, d_p, nov, total, (start + gpu_id*offset), (start + (gpu_id+1)*offset));
     }
     cudaDeviceSynchronize();
     //double enn = omp_get_wtime();
     //cout << "kernel" << gpu_id << " in " << (enn - stt) << endl;
     //printf("kernel %d in %f \n", gpu_id, enn - stt);
     
-    cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+    cudaMemcpy( h_p, d_p, grid_dims[gpu_id] * block_dims[gpu_id] * sizeof(C), cudaMemcpyDeviceToHost);
     
     cudaFree(d_x);
     cudaFree(d_p);
@@ -1456,7 +1454,7 @@ template <class C, class S>
     cudaFree(d_rows);
     cudaFree(d_cvals);
     
-    for (int i = 0; i < grid_dim * block_dim; i++) {
+    for (int i = 0; i < grid_dims[gpu_id] * block_dims[gpu_id]; i++) {
       p_partial[gpu_id] += (double)h_p[i];
     }
     

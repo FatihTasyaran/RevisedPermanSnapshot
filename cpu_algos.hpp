@@ -1107,103 +1107,103 @@ Result parallel_skip_perman64_w_balanced(SparseMatrix<S>* sparsemat, flags flags
   int no_chunks = 512;
   //int no_chunks = 2048;
   chunk_size = (end - start + 1) / no_chunks + 1;
-
-  #pragma omp parallel num_threads(threads) private(j, ci, change_j) 
+  
+#pragma omp parallel num_threads(threads) private(j, ci, change_j) 
   {
     C my_x[nov];
     
-    #pragma omp for schedule(dynamic, 1)
-      for(int cid = 0; cid < no_chunks; cid++) {
+#pragma omp for schedule(dynamic, 1)
+    for(int cid = 0; cid < no_chunks; cid++) {
       //    int tid = omp_get_thread_num();
-        unsigned long long my_start = start + cid * chunk_size;
-        unsigned long long my_end = min(start + ((cid+1) * chunk_size), end);
+      unsigned long long my_start = start + cid * chunk_size;
+      unsigned long long my_end = min(start + ((cid+1) * chunk_size), end);
       
-        //update if neccessary
-        C my_p = 0;
+      //update if neccessary
+      C my_p = 0;
+      
+      unsigned long long my_gray;    
+      unsigned long long my_prev_gray = 0;
+      memcpy(my_x, x, sizeof(C) * nov);
+      
+      int ptr, last_zero;
+      unsigned long long period, steps, step_start;
+      
+      unsigned long long i = my_start;
+      
+      while (i < my_end) {
+	//k = __builtin_ctzll(i + 1);
+	my_gray = i ^ (i >> 1);
         
-        unsigned long long my_gray;    
-        unsigned long long my_prev_gray = 0;
-        memcpy(my_x, x, sizeof(C) * nov);
-
-        int ptr, last_zero;
-        unsigned long long period, steps, step_start;
+	unsigned long long gray_diff = my_prev_gray ^ my_gray;
         
-        unsigned long long i = my_start;
-        
-        while (i < my_end) {
-          //k = __builtin_ctzll(i + 1);
-          my_gray = i ^ (i >> 1);
-          
-          unsigned long long gray_diff = my_prev_gray ^ my_gray;
-          
-          j = 0;
-          while(gray_diff > 0) { // this contains the bit to be updated
-            unsigned long long onej = 1ULL << j;
-            if(gray_diff & onej) { // if bit l is changed 
-              gray_diff ^= onej;   // unset bit
-              if(my_gray & onej) {    // do the update
-                for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
-                  my_x[rows[ptr]] += cvals[ptr];
-                }
-              }
-              else {
-                for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
-                  my_x[rows[ptr]] -= cvals[ptr];
-                }
-              }
-            }
-            j++;
-          }
-          //counter++;
-          my_prev_gray = my_gray;
-          last_zero = -1;
-	  
-          C my_prod = 1;
-	  if(1){
-	  for(j = nov - 1; j >= 0; j--) {
-            my_prod *= my_x[j];
-            if(my_x[j] == 0) {
-              last_zero = j;
-              break;
-            }
-          }
+	j = 0;
+	while(gray_diff > 0) { // this contains the bit to be updated
+	  unsigned long long onej = 1ULL << j;
+	  if(gray_diff & onej) { // if bit l is changed 
+	    gray_diff ^= onej;   // unset bit
+	    if(my_gray & onej) {    // do the update
+	      for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
+		my_x[rows[ptr]] += cvals[ptr];
+	      }
+	    }
+	    else {
+	      for (ptr = cptrs[j]; ptr < cptrs[j + 1]; ptr++) {
+		my_x[rows[ptr]] -= cvals[ptr];
+	      }
+	    }
 	  }
-  
-          if(my_prod != 0) {
-            my_p += ((i&1ULL)? -1.0:1.0) * my_prod;
-            i++;
-          } 
-          else {
-            change_j = -1;
-            for (ptr = rptrs[last_zero]; ptr < rptrs[last_zero + 1]; ptr++) {
-              step_start = 1ULL << cols[ptr]; 
-              period = step_start << 1; 
-              ci = step_start;
-              if(i >= step_start) {
-                steps = (i - step_start) / period;
-                ci = step_start + ((steps + 1) * period);
-              }
-              if(ci < change_j) {
-                change_j = ci;
-              }
-            }
-      
-            i++;
-            if(change_j > i) {
-              i = change_j;
-            } 
-          }
-        }
-      
-        #pragma omp critical
-          p += my_p;
+	  j++;
+	}
+	//counter++;
+	my_prev_gray = my_gray;
+	last_zero = -1;
+	
+	C my_prod = 1;
+	
+	for(j = nov - 1; j >= 0; j--) {
+	  my_prod *= my_x[j];
+	  if(my_x[j] == 0) {
+	    last_zero = j;
+	    break;
+	  }
+	}
+	
+	
+	if(my_prod != 0) {
+	  my_p += ((i&1ULL)? -1.0:1.0) * my_prod;
+	  i++;
+	} 
+	else {
+	  change_j = -1;
+	  for (ptr = rptrs[last_zero]; ptr < rptrs[last_zero + 1]; ptr++) {
+	    step_start = 1ULL << cols[ptr]; 
+	    period = step_start << 1; 
+	    ci = step_start;
+	    if(i >= step_start) {
+	      steps = (i - step_start) / period;
+	      ci = step_start + ((steps + 1) * period);
+	    }
+	    if(ci < change_j) {
+	      change_j = ci;
+	    }
+	  }
+	  
+	  i++;
+	  if(change_j > i) {
+	    i = change_j;
+	  } 
+	}
       }
+      
+#pragma omp critical
+      p += my_p;
+    }
   }
-    
+  
   double duration = omp_get_wtime() - starttime;  
   double perman = (4*(nov&1)-2) * p;
   Result result(perman, duration);
-
+  
   //if(flags.type == "__float128"){
   //__float128 big_perman = (4*(nov&1)-2) * p;
   //printf("Difference: %.16e \n", big_perman - perman);

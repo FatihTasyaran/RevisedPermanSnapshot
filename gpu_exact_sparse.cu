@@ -171,24 +171,29 @@ template <class C, class S>
   
   //first initialize the vector then we will copy it to ourselves
   
-  int j, ptr;
+  int j = 0;
   //unsigned long long ci, start, end, chunk_size;
   unsigned long long ci, chunk_size;
   double change_j;
 
   int no_chunks = threads * 32;
   chunk_size = (end - start + 1) / no_chunks + 1;
+  printf("chunk_size: %llu \n", chunk_size);
   
-
   #pragma omp parallel num_threads(threads) private(j, ci, change_j) 
   {
     C my_x[nov];
     
 #pragma omp for schedule(dynamic, 1)
     for(int cid = 0; cid < no_chunks; cid++) {
-      //int tid = omp_get_thread_num();
+      int tid = omp_get_thread_num();
       unsigned long long my_start = start + cid * chunk_size;
       unsigned long long my_end = min(start + ((cid+1) * chunk_size), end);
+
+#pragma omp critical
+      {
+	printf("start: %llu - end: %llu || cid: %d || tid: %d -- my_start: %llu - my_end: %llu \n", start, end, cid, tid, my_start, my_end);
+      }
       
       //update if neccessary
       C my_p = 0;
@@ -197,8 +202,7 @@ template <class C, class S>
       unsigned long long my_prev_gray = 0;
       memcpy(my_x, x, sizeof(C) * nov);
       
-      //int ptr, last_zero;
-      int last_zero;
+      int ptr, last_zero;
       unsigned long long period, steps, step_start;
       
       unsigned long long i = my_start;
@@ -232,15 +236,15 @@ template <class C, class S>
 	last_zero = -1;
 	
 	C my_prod = 1;
-	if(1){
-	  for(j = nov - 1; j >= 0; j--) {
-            my_prod *= my_x[j];
-            if(my_x[j] == 0) {
-              last_zero = j;
-              break;
-            }
-          }
+	
+	for(j = nov - 1; j >= 0; j--) {
+	  my_prod *= my_x[j];
+	  if(my_x[j] == 0) {
+	    last_zero = j;
+	    break;
+	  }
 	}
+	
 	
 	if(my_prod != 0) {
 	  my_p += ((i&1ULL)? -1.0:1.0) * my_prod;
@@ -1881,8 +1885,7 @@ template <class C, class S>
     cpu = false;
   }
   int if_cpu = (int)cpu; //1 thread will be responsible for launching cpu kernel if cpu is chosen 
-  
-  
+    
   C x[nov]; 
   C rs; //row sum
   C p = 1; //product of the elements in vector 'x'
@@ -1892,10 +1895,11 @@ template <class C, class S>
     p_partial[id] = 0;
   }
 
-  int number_of_chunks = 1;
-  for (int i = 30; i < nov/4; i++) {
+  unsigned long long number_of_chunks = 1;
+  for (int i = 0; i < nov/4; i++) {
     number_of_chunks *= 2;
   }
+  
   int chunk_id = 0;
   
   int total = 0;
@@ -1965,6 +1969,8 @@ template <class C, class S>
 	cudaSetDevice(tid);
 	cudaStream_t thread_stream;
 	cudaStreamCreate(&thread_stream);
+	//printf("Thread %d set device to: %s \n", tid, props[tid].name);
+	
 	
 	int grid_dim = 0;
 	int block_dim = 0;
@@ -2001,6 +2007,7 @@ template <class C, class S>
 	while(last < number_of_chunks){
 	  
 	  cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
+	  printf("tid: %d -- last: %d / %llu \n", tid, last, number_of_chunks);
 	  
 	  if(last == number_of_chunks - 1){
 	      kernel_xshared_coalescing_mshared_skipper<C,S><<<grid_dim, block_dim, size>>>(d_rptrs,
@@ -2034,17 +2041,17 @@ template <class C, class S>
 	  
 	  cudaMemcpy(h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 	  cudaFree(d_p);
-
+	  
 	  for(int i = 0; i < grid_dim * block_dim; i++){
 	    p_partial[tid] += h_p[i];
 	  }
-
+	  
 #pragma omp atomic update
 	  curr_chunk++;
 #pragma omp atomic read
 	  last = curr_chunk;
 	}
-
+	
         cudaFree(d_x);
         cudaFree(d_p);
         cudaFree(d_rptrs);
@@ -2059,7 +2066,10 @@ template <class C, class S>
     
     
     double return_p = p;
-    
+
+    for(int i = 0; i < gpu_num + if_cpu; i++){
+      printf("p_partial[%d]: %f \n", i, p_partial[i]);
+    }
     
     for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
       return_p += p_partial[dev];

@@ -594,7 +594,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_approximation_multigpucpu_chunks";
-      perman = gpu_perman64_approximation_multigpucpu_chunks(densemat, flags);
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_approximation_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_approximation_multigpucpu_chunks<double, S>(densemat, flags);
       
     }
     else {
@@ -749,10 +752,13 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #ifdef STRUCTURAL
       exit(1);
 #endif
-
+      
       flags.algo_name = "approximation_mulltigpucpu_chunks";
-      perman = gpu_perman64_approximation_multigpucpu_chunks(densemat, flags);
-	
+
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_approximation_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_approximation_multigpucpu_chunks<double, S>(densemat, flags);
     }
   }
   

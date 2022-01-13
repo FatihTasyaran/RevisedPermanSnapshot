@@ -131,8 +131,8 @@ struct flags {
     gpu_num = 1; //Assumed we will use 1 GPU
     number_of_times = 100000; //Assumed 100K
 
-    grid_dim = 2048; // Assumed 2048 / 256, will override if 
-    block_dim = 256; // desired otherwise
+    grid_dim = 64; // If something go wrong and dynamic size cannot be determined 
+    block_dim = 64; // better be slow than be wrong
 
     device_id = 0; //Assumed one and only GPU
     rep = 1; //Assume one repetition

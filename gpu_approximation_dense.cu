@@ -57,18 +57,19 @@ bool ScaleMatrix(S M,
 }
 //
 
-template <class T>
-double cpu_rasmussen(T* mat,
-		     T* mat_t,
-		     int nov,
-		     int random,
-		     int number_of_times,
-		     int threads) {
-
+template <class C, class S>
+  C cpu_rasmussen(S* mat,
+		       S* mat_t,
+		       int nov,
+		       int random,
+		       int number_of_times,
+		       int threads) {
+  
   srand(random);
+  
+  C sum_perm = 0;
+  C sum_zeros = 0;
 
-  double sum_perm = 0;
-  double sum_zeros = 0;
   
   #pragma omp parallel for num_threads(threads) reduction(+:sum_perm) reduction(+:sum_zeros)
     for (int time = 0; time < number_of_times; time++) {
@@ -78,13 +79,13 @@ double cpu_rasmussen(T* mat,
       for (int i = 0; i < nov; i++) {
         row_nnz[i] = 0;
         for (int j = 0; j < nov; j++) {
-          if (mat[(i * nov) + j] != 0) {
+          if (mat[(i * nov) + j] != (S)0) {
             row_nnz[i] += 1;
           }
         }
       }
       
-      double perm = 1;
+      C perm = 1;
       
       for (int row = 0; row < nov; row++) {
         // multiply permanent with number of nonzeros in the current row
@@ -94,7 +95,7 @@ double cpu_rasmussen(T* mat,
         int random = rand() % row_nnz[row];
         int col;
         for (int c = 0; c < nov; c++) {
-          if (!((col_extracted >> c) & 1L) && mat[row * nov + c] != 0) {
+          if (!((col_extracted >> c) & 1L) && mat[row * nov + c] != (S)0) {
             if (random == 0) {
               col = c;
               break;
@@ -129,8 +130,9 @@ double cpu_rasmussen(T* mat,
       sum_perm += perm;
     }
 
-  
-  return sum_perm;
+    //printf("CPU returning: %f \n", (double)sum_perm);
+    return sum_perm;
+    
 }
 
 template <class T>
@@ -467,19 +469,19 @@ template <class C, class S>
   int device_id = flags.device_id;
   int grid_dim_multip = flags.grid_multip;
   //Pack flags//
-
+  
   cudaSetDevice(device_id);
   cudaDeviceSynchronize();
-
+  
   double starttime = omp_get_wtime();
   
   int grid_dim = 1024;
   int block_dim = number_of_times / grid_dim + 1;
-
+  
   glob_nov = nov;
   glob_sizeof_c = sizeof(C);
   glob_sizeof_s = sizeof(S);
-
+  
   size_t size = nov*nov*sizeof(S);
   
   cudaOccupancyMaxPotentialBlockSize(&grid_dim,
@@ -541,137 +543,187 @@ template <class C, class S>
   //return (p / (grid_dim * block_dim));
 }
 
-template <class T>
-extern double gpu_perman64_rasmussen_multigpucpu_chunks(DenseMatrix<T>* densemat, flags flags) {
-
+template <class C, class S>
+  extern Result gpu_perman64_rasmussen_multigpucpu_chunks(DenseMatrix<S>* densemat, flags flags) {
+  
   //Pack parameters//
-  T* mat = densemat->mat;
+  S* mat = densemat->mat;
   int nov = densemat->nov;
   //Pack parameters//
-
+  
   //Pack flags//
   int number_of_times = flags.number_of_times;
   int gpu_num = flags.gpu_num;
   bool cpu = flags.cpu;
   int threads = flags.threads;
+  int f_grid_dim = flags.grid_dim;
+  int f_block_dim = flags.block_dim;
+  int grid_dim_multip = flags.grid_multip;
   //Pack flags//
   
-  int block_size = 1024;
-  int grid_size = 1024;
-  int cpu_chunk = 50000;
-  int num_of_times_so_far = 0;
+  cudaDeviceProp* props = new cudaDeviceProp[gpu_num];
+  for(int i = 0; i < gpu_num; i++){
+    cudaGetDeviceProperties(&props[i], i);
+    printf("===SC=== Using Device: %d -- %s \n", i, props[i].name);
+  }
+  
+  double starttime = omp_get_wtime();
+  int gpu_driver_threads = gpu_num;
+  int calculation_threads = threads - gpu_num;
+  
+  printf("===SC=== Using %d threads for GPU drivers \n", gpu_driver_threads);
+  printf("===SC=== Using %d threads for calculation \n", calculation_threads);
+  
+  if(calculation_threads < 1){
+    printf("===WARNING=== No calculation threads left for CPU \n");
+    cpu = false;
+  }
+  
+  int grid_dims[gpu_num];
+  int block_dims[gpu_num];
+  
+  //For max potential block size
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For max potential block size
+  
+  size_t size = nov*nov*sizeof(S);
+  
+  for(int dev = 0; dev < gpu_num; dev++){
+    cudaSetDevice(dev);
+    
+    cudaOccupancyMaxPotentialBlockSize(&grid_dims[dev],
+				       &block_dims[dev],
+				       &kernel_rasmussen<C,S>,
+				       size,
+				       0);
 
-  double p = 0;
-  double p_partial[gpu_num+1];
-  double p_partial_times[gpu_num+1];
-  for (int id = 0; id < gpu_num+1; id++) {
-    p_partial[id] = 0;
-    p_partial_times[id] = 0;
+    if(grid_dim_multip != 1){
+      grid_dims[dev] *= grid_dim_multip;
+      block_dims[dev] *= grid_dim_multip;
+    }
+  }
+  
+  int if_cpu = (int)cpu;
+  
+  unsigned long long cpu_chunk = if_cpu * (number_of_times / 1000);
+  unsigned long long gpu_chunks[gpu_num];
+  
+  for(int dev = 0; dev < gpu_num; dev++){
+    gpu_chunks[dev] = grid_dims[dev] * block_dims[dev];
+  }
+  
+  C p = 0;
+  C p_partial[gpu_num + if_cpu];
+  C p_partial_times[gpu_num + if_cpu];
+  
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
+    p_partial[dev] = 0;
+    p_partial_times[dev] = 0;
+  }
+  
+  unsigned long long curr_chunk = 0;
+  for(int dev = 0;  dev < gpu_num; dev++){
+    curr_chunk +  gpu_chunks[dev];
   }
 
+  curr_chunk += if_cpu * cpu_chunk;
+  
   srand(time(0));
-
+  
   omp_set_nested(1);
   omp_set_dynamic(0);
-  #pragma omp parallel for num_threads(gpu_num+1)
-    for (int id = 0; id < gpu_num+1; id++) {
-      if (id == gpu_num) {
-        if (cpu) {
-          T* mat_t = new T[nov * nov];
-          for (int i = 0; i < nov; i++) {
-            for (int j = 0; j < nov; j++) {
-              mat_t[(j * nov) + i] = mat[(i * nov) + j];
-            }
-          }
-
-          bool check = true;
-          #pragma omp critical 
-          {
-            if (num_of_times_so_far < number_of_times) {
-              num_of_times_so_far += cpu_chunk;
-            } else {
-              check = false;
-            }
-          }
-          while (check) {
-            double stt = omp_get_wtime();
-            p_partial[id] += cpu_rasmussen(mat, mat_t, nov, rand(), cpu_chunk, threads);
-            double enn = omp_get_wtime();
-            p_partial_times[id] += cpu_chunk;
-            //cout << "cpu" << " in " << (enn - astt) << endl;
-	    printf("cpu in %f \n", enn - stt);
-            #pragma omp critical 
-            {
-              if (num_of_times_so_far < number_of_times) {
-                num_of_times_so_far += cpu_chunk;
-              } else {
-                check = false;
-              }
-            }
-          }
-          delete[] mat_t;
-        }
-      } else {
-        bool check = true;
-        #pragma omp critical 
-        {
-          if (num_of_times_so_far < number_of_times) {
-            num_of_times_so_far += grid_size * block_size;
-          } else {
-            check = false;
-          }
-        }
-        cudaSetDevice(id);
-        T *d_mat;
-        double *d_p;
-        double *h_p = new double[grid_size * block_size];
-
-        cudaMalloc( &d_p, (grid_size * block_size) * sizeof(double));
-        cudaMalloc( &d_mat, (nov * nov) * sizeof(T));
-
-        cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(T), cudaMemcpyHostToDevice);
-
-	int x;
-        while (check) {
-	  x = 1;
-          double stt = omp_get_wtime();
-          //kernel_rasmussen<<< grid_size , block_size , (nov*nov*sizeof(T)) >>> (d_mat, d_p, nov, rand());
-          cudaDeviceSynchronize();
-          double enn = omp_get_wtime();
-          //cout << "kernel" << id << " in " << (enn - stt) << endl;
-	  printf("kernel %d in %f \n", id, enn - stt);
-
-          cudaMemcpy( h_p, d_p, grid_size * block_size * sizeof(double), cudaMemcpyDeviceToHost);
-
-          for (int i = 0; i < grid_size * block_size; i++) {
-            p_partial[id] += h_p[i];
-          }
-          p_partial_times[id] += (grid_size * block_size);
-          #pragma omp critical 
-          {
-            if (num_of_times_so_far < number_of_times) {
-              num_of_times_so_far += grid_size * block_size;
-            } else {
-              check = false;
-            }
-          }
-        }
-
-        cudaFree(d_mat);
-        cudaFree(d_p);
-        delete[] h_p;
+#pragma omp parallel num_threads(gpu_num + if_cpu) 
+  {
+    
+    int tid = omp_get_thread_num();
+    int nt = omp_get_num_threads();
+    
+    unsigned long long last = curr_chunk;
+#pragma omp barrier
+    
+    if (tid == gpu_num) {//CPU PART
+      
+      S* mat_t = new S[nov * nov]; //Create transpose of the matrix
+      for (int i = 0; i < nov; i++) {
+	for (int j = 0; j < nov; j++) {
+	  mat_t[(j * nov) + i] = mat[(i * nov) + j];
+	}
       }
-    }
 
-  for (int id = 0; id < gpu_num+1; id++) {
-    p += p_partial[id];
+      while (last < number_of_times) {
+	p_partial[tid] += cpu_rasmussen<C,S>(mat, mat_t, nov, (int)rand(), (int)cpu_chunk, calculation_threads);
+	p_partial_times[tid] += cpu_chunk;
+	
+#pragma omp atomic update
+	curr_chunk += cpu_chunk;
+#pragma omp atomic read
+	last = curr_chunk;
+      }	
+      delete[] mat_t;
+    }//CPU PART
+    
+    else { //GPU PART
+      
+      cudaSetDevice(tid);
+      
+      int grid_dim = f_grid_dim;
+      int block_dim = f_block_dim;
+      
+      cudaStream_t thread_stream;
+      cudaStreamCreate(&thread_stream);
+      
+      S *d_mat;
+      C *d_p;
+      C *h_p = new C[grid_dims[tid] * block_dims[tid]];
+      
+      //cudaMalloc( &d_p, (grid_size * block_size) * sizeof(C));
+      cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
+      
+      cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+      
+      while (last < number_of_times) {
+	
+	cudaMalloc(&d_p, (grid_dims[tid] * block_dims[tid]) * sizeof(C));
+	kernel_rasmussen<<< grid_dims[tid] , block_dims[tid] , size >>>(d_mat, d_p, nov, rand());
+	cudaStreamSynchronize(thread_stream);
+	cudaMemcpy( h_p, d_p, grid_dims[tid] * block_dims[tid] * sizeof(C), cudaMemcpyDeviceToHost);
+	
+	for (int i = 0; i < grid_dims[tid] * block_dims[tid]; i++) {
+	  p_partial[tid] += h_p[i];
+	}
+	
+	p_partial_times[tid] += (grid_dims[tid] * block_dims[tid]);
+	cudaFree(d_p);
+	
+#pragma omp atomic update
+	curr_chunk += gpu_chunks[tid];
+#pragma omp atomic read
+	last = curr_chunk;
+      }
+      
+      cudaFree(d_mat);
+      
+      delete[] h_p;
+    }
   }
+  
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
+    p += p_partial[dev];
+  }
+  
   double times = 0;
   for (int id = 0; id < gpu_num+1; id++) {
     times += p_partial_times[id];
   }
-
-  return p / times;
+  
+  double duration = omp_get_wtime() - starttime;
+  printf("==SI== Actual Times: %d \n", (int)times);
+  
+  double perman = p / times;
+  Result result(perman, duration);
+  return result;
 }
 
 template <class C, class S>
@@ -925,10 +977,12 @@ template extern Result gpu_perman64_rasmussen<double, double>(DenseMatrix<double
 /////
 
 /////
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks<int>(DenseMatrix<int>* densemat, flags flags);
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks<float>(DenseMatrix<float>* densemat, flags flags);
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks<double>(DenseMatrix<double>* densemat, flags flags);
-
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_rasmussen_multigpucpu_chunks<double, double>(DenseMatrix<double>* densemat, flags flags);
 /////
 
 /////
@@ -947,6 +1001,7 @@ template extern double gpu_perman64_approximation_multigpucpu_chunks<float>(Dens
 template extern double gpu_perman64_approximation_multigpucpu_chunks<double>(DenseMatrix<double>* densemat, flags flags);
 /////
 
+//template double cpu_rasmussen<float,int>(int* mat, int* mat_t)
 //Explicit instantiations required for separate compilation
 
 

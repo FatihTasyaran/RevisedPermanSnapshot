@@ -577,10 +577,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
 
-      //This will change accordingly
       flags.algo_name = "gpu_rasmussen_multigpucpu_chunks";
-      perman = gpu_perman64_rasmussen_multigpucpu_chunks(densemat, flags);
-      
+
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_rasmussen_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_rasmussen_multigpucpu_chunks<double, S>(densemat, flags);
     
     }
     else if (perman_algo == 4) { // approximation_with_scaling
@@ -647,8 +649,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_rasmussen_multigpucpu_chunks_sparse";
-      //This will change accordingly
-      perman = gpu_perman64_rasmussen_multigpucpu_chunks_sparse(sparsemat, flags);
+
+      int x = 1;
+      //if(flags.calculation_half_precision)
+	//result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
+      //else
+	//result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
 	
     } else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
@@ -658,7 +664,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
 
-      flags.algo_name = "gpu_approximation_myultigpucpu_chunks_sparse";
+      flags.algo_name = "gpu_approximation_multigpucpu_chunks_sparse";
       //This will change accordingly
       perman = gpu_perman64_approximation_multigpucpu_chunks_sparse(sparsemat, flags);
 	
@@ -730,8 +736,11 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "rasmussen_multigpucpu_chunks";
-      perman = gpu_perman64_rasmussen_multigpucpu_chunks(densemat, flags);
-
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_rasmussen_multigpucpu_chunks<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_rasmussen_multigpucpu_chunks<double, S>(densemat, flags);
+	
     }
     else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG

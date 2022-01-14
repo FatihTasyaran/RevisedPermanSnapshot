@@ -653,11 +653,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
       flags.algo_name = "gpu_rasmussen_multigpucpu_chunks_sparse";
 
-      int x = 1;
-      //if(flags.calculation_half_precision)
-	//result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
-      //else
-	//result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
+      else
+	result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
 	
     } else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
@@ -771,9 +770,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       exit(1);
 #endif
 
-      flags.algo_name = "gpu_perman6_rasmussen_multigpucpu_chunks_sparse";
-      perman = gpu_perman64_rasmussen_multigpucpu_chunks_sparse(sparsemat, flags);
-
+      flags.algo_name = "gpu_perman64_rasmussen_multigpucpu_chunks_sparse";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
+      else
+	result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
     
     }
     else if (perman_algo == 4) { // approximation_with_scaling
@@ -870,32 +872,29 @@ void RunPermanForGridGraphs(flags flags) {
   if (gpu) {
     if (perman_algo == 1) { // rasmussen
       for(int i = 0; i < no_repetition; i++){
-	//start = omp_get_wtime();
+	
 	if(flags.calculation_half_precision)
 	  result = gpu_perman64_rasmussen_sparse<float, int>(sparsemat, flags);
 	else
 	  result = gpu_perman64_rasmussen_sparse<double, int>(sparsemat, flags);
-	printf("Result | gpu_perman64_rasmussen_sparse | %.10e in %f \n", result.permanent, result.time);
       }
     } else if (perman_algo == 2) { // approximation_with_scaling
       for(int i = 0; i < no_repetition; i++){
-	start = omp_get_wtime();
 	if(flags.calculation_half_precision)
 	  result = gpu_perman64_approximation_sparse<float, int>(sparsemat, flags);
 	else
 	  result = gpu_perman64_approximation_sparse<double, int>(sparsemat, flags);
-	end = omp_get_wtime();
-	//printf("Result: gpu_perman64_approximation_sparse %2lf in %lf\n", perman, end-start);
-	//cout << "Try: gpu_perman64_approximation_sparse " << perman << " in " << (end - start) << endl;
-	printf("Result | gpu_perman64_approximation_sparse | %.16e in %f \n", result.permanent, result.time);
+	
       }
     } else if (perman_algo == 3) { // rasmussen
       for(int i = 0; i < no_repetition; i++){
-	start = omp_get_wtime();
-	perman = gpu_perman64_rasmussen_multigpucpu_chunks_sparse(sparsemat, flags);
-	end = omp_get_wtime();
-	printf("Result: gpu_perman64_rasmussen_multigpucpu_chunks %2lf in %lf\n", perman, end-start);
-	cout << "Try: gpu_perman64_rasmussen_multigpucpu_chunks " << perman << " in " << (end - start) << endl;
+	
+
+	if(flags.calculation_half_precision)
+	  result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, int>(sparsemat, flags);
+	else
+	  result = gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, int>(sparsemat, flags);
+	
       }
     } else if (perman_algo == 4) { // approximation_with_scaling
       for(int i = 0; i < no_repetition; i++){
@@ -911,25 +910,22 @@ void RunPermanForGridGraphs(flags flags) {
   } else if (cpu) {
     if (perman_algo == 1) { // rasmussen
       for(int i = 0; i < no_repetition; i++){
-	start = omp_get_wtime();
+	
 	if(flags.calculation_half_precision)
 	  result = rasmussen_sparse<float, int>(densemat, sparsemat, flags);
 	else
 	  result = rasmussen_sparse<double, int>(densemat, sparsemat, flags);
-	end = omp_get_wtime();
-	printf("Result: rasmussen_sparse %.16e in %lf\n", perman, end-start);
-	//cout << "Try: rasmussen_sparse " << perman << " in " << (end - start) << endl;
+	
       }
     } else if (perman_algo == 2) { // approximation_with_scaling
       for(int i = 0; i < no_repetition; i++){
-	start = omp_get_wtime();
+	
 	if(flags.calculation_half_precision)
 	  result = approximation_perman64_sparse<float, int>(sparsemat, flags);
 	else
 	  result = approximation_perman64_sparse<double, int>(sparsemat, flags);
-	end = omp_get_wtime();
-	printf("Result: approximation_perman64_sparse %.16e in %lf\n", perman, end-start);
-	//cout << "Try: approximation_perman64_sparse " << perman << " in " << (end - start) << endl;
+	
+	
       }
     } else {
       cout << "Unknown Algorithm ID" << endl;
@@ -944,8 +940,7 @@ void RunPermanForGridGraphs(flags flags) {
       else
 	result = rasmussen_sparse<double, int>(densemat, sparsemat, flags);
       end = omp_get_wtime();
-      printf("Result: rasmussen_sparse %.16e in %lf\n", perman, end-start);
-      //cout << "Try: rasmussen_sparse " << perman << " in " << (end - start) << endl;
+      
     }
   } else if (perman_algo == 2) { // approximation_with_scaling
     for(int i = 0; i < no_repetition; i++){
@@ -955,8 +950,6 @@ void RunPermanForGridGraphs(flags flags) {
       else
 	result = approximation_perman64_sparse<double, int>(sparsemat, flags);
       end = omp_get_wtime();
-      printf("Result: approximation_perman64_sparse %.16e in %lf\n", perman, end-start);
-      //cout << "Try: approximation_perman64_sparse " << perman << " in " << (end - start) << endl;
     }
   } else {
     cout << "Unknown Algorithm ID" << endl;

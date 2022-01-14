@@ -6,6 +6,8 @@
 #include "flags.h"
 #include "gpu_wrappers.h"
 
+#define BITARRSIZE 32
+
 bool cpu_ScaleMatrix_sparse(int *cptrs,
 			    int *rows,
 			    int *rptrs,
@@ -74,9 +76,9 @@ double cpu_rasmussen_sparse(int *cptrs,
   #pragma omp parallel for num_threads(threads) reduction(+:sum_perm) reduction(+:sum_zeros)
     for (int time = 0; time < number_of_times; time++) {
       int row_nnz[nov];
-      int col_extracted[21];
-      int row_extracted[21];
-      for (int i = 0; i < 21; i++) {
+      int col_extracted[BITARRSIZE];
+      int row_extracted[BITARRSIZE];
+      for (int i = 0; i < BITARRSIZE; i++) {
         col_extracted[i]=0;
         row_extracted[i]=0;
       }
@@ -167,9 +169,9 @@ double cpu_approximation_perman64_sparse(int *cptrs,
   
 #pragma omp parallel for num_threads(threads) reduction(+:sum_perm) reduction(+:sum_zeros)
   for (int time = 0; time < number_of_times; time++) {
-    int col_extracted[21];
-    int row_extracted[21];
-    for (int i = 0; i < 21; i++) {
+    int col_extracted[BITARRSIZE];
+    int row_extracted[BITARRSIZE];
+    for (int i = 0; i < BITARRSIZE; i++) {
       col_extracted[i]=0;
       row_extracted[i]=0;
     }
@@ -296,10 +298,10 @@ __global__ void kernel_rasmussen_sparse(int* rptrs, int* cols, C* p, int nov, in
   curandState_t state; 
   curand_init(rand*tid,0,0,&state);
 
-  int col_extracted[21]; //Yet another 21 and  
-  int row_extracted[21]; //Yet another 21, tihs is bad, but otherwise is worse
+  int col_extracted[BITARRSIZE]; //Yet another 21 and  
+  int row_extracted[BITARRSIZE]; //Yet another 21, tihs is bad, but otherwise is worse
   //In worst case, may move these arrays to shared memory
-  for (int i = 0; i < 21; i++) {
+  for (int i = 0; i < BITARRSIZE; i++) {
     col_extracted[i]=0;
     row_extracted[i]=0;
   }
@@ -394,11 +396,11 @@ __global__ void kernel_approximation_sparse(int* rptrs, int* cols, int* cptrs, i
   curandState_t state;
   curand_init(rand*tid,0,0,&state);
   
-  int col_extracted[21]; //We have another 21 here
-  int row_extracted[21]; //We have yet another 21 here
+  int col_extracted[BITARRSIZE]; //We have another 21 here
+  int row_extracted[BITARRSIZE]; //We have yet another 21 here
   //It is not illogical since they used bit-wise but;
   //They also may cause kernel to not launching or register spilling
-  for (int i = 0; i < 21; i++) {
+  for (int i = 0; i < BITARRSIZE; i++) {
     col_extracted[i]=0;
     row_extracted[i]=0;
   }
@@ -615,9 +617,11 @@ extern Result gpu_perman64_rasmussen_sparse(SparseMatrix<S>* sparsemat, flags fl
   //return (p / (grid_dim * block_dim));
 }
 
-template<class T>
-extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<T>* sparsemat, flags flags) {
+template <class C, class S>
+  extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<S>* sparsemat, flags flags) {
 
+  printf("Just written \n");
+  
   //Pack parameters//
   int* cptrs = sparsemat->cptrs;
   int* rows = sparsemat->rows;
@@ -633,126 +637,165 @@ extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<T>* 
   bool cpu = flags.cpu;
   int threads = flags.threads;
   bool grid_graph = flags.grid_graph;
+  int f_grid_dim = flags.grid_dim;
+  int f_block_dim = flags.block_dim;
+  int grid_dim_multip = flags.grid_multip;
   //Pack flags//
 
-  
-  int block_size = 1024;
-  int grid_size = 1024;
-
-  int cpu_chunk = 50000;
-  int num_of_times_so_far = 0;
-
-  double p = 0;
-  double p_partial[gpu_num+1];
-  double p_partial_times[gpu_num+1];
-  for (int id = 0; id < gpu_num+1; id++) {
-    p_partial[id] = 0;
-    p_partial_times[id] = 0;
+  cudaDeviceProp* props = new cudaDeviceProp[gpu_num];
+  for(int i = 0; i < gpu_num; i++){
+    cudaGetDeviceProperties(&props[i], i);
+    printf("==SC== Using Device: %d -- %s \n", i, props[i].name);
   }
 
+  double starttime = omp_get_wtime();
+  int gpu_driver_threads = gpu_num;
+  int calculation_threads = threads - gpu_num;
+
+  
+  printf("==SC== Using %d threads for GPU drivers \n", gpu_driver_threads);
+  printf("==SC== Using %d threads for calculation \n", calculation_threads);
+  
+  if(calculation_threads < 1){
+    printf("==WARNING== No calculation threads left for CPU \n");
+    cpu = false;
+  }
+
+  int if_cpu = (int)cpu;
+  
+  int grid_dims[gpu_num];
+  int block_dims[gpu_num];
+  
+  
+  size_t size = ((nnz + nov + 1) * sizeof(int));
+  
+  for(int dev = 0; dev < gpu_num; dev++){
+    cudaOccupancyMaxPotentialBlockSize(&grid_dims[dev],
+				       &block_dims[dev],
+				       &kernel_rasmussen_sparse<C>,
+				       size,
+				       0);
+
+    if(grid_dim_multip != 1){
+      grid_dims[dev] *= grid_dim_multip;
+    }
+  }
+
+  unsigned long long cpu_chunk = if_cpu * (number_of_times / 1000);
+  unsigned long long gpu_chunks[gpu_num];
+  for(int dev = 0; dev < gpu_num; dev++){
+    gpu_chunks[dev] = grid_dims[dev] * block_dims[dev];
+  }
+
+  unsigned long long curr_chunk = 0;
+  
+  C p = 0;
+  C p_partial[gpu_num + if_cpu];
+  C p_partial_times[gpu_num + if_cpu];
+  
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
+    p_partial[dev] = 0;
+    p_partial_times[dev] = 0;
+  }
+
+  
+  
   srand(time(0));
 
   omp_set_nested(1);
   omp_set_dynamic(0);
-  #pragma omp parallel for num_threads(gpu_num+1)
-    for (int id = 0; id < gpu_num+1; id++) {
-      if (id == gpu_num) {
-        if (cpu) {
-          bool check = true;
-          #pragma omp critical 
-          {
-            if (num_of_times_so_far < number_of_times) {
-              num_of_times_so_far += cpu_chunk;
-            } else {
-              check = false;
-            }
-          }
-          while (check) {
-            double stt = omp_get_wtime();
-            p_partial[id] += cpu_rasmussen_sparse(cptrs, rows, rptrs, cols, nov, rand(), number_of_times, threads);
-            double enn = omp_get_wtime();
-            p_partial_times[id] += cpu_chunk;
-            //cout << "cpu" << " in " << (enn - stt) << endl;
-	    printf("cpu in %f \n", enn - stt);
-#pragma omp critical 
-            {
-              if (num_of_times_so_far < number_of_times) {
-                num_of_times_so_far += cpu_chunk;
-              } else {
-                check = false;
-              }
-            }
-          }
-        }
-      } else {
-        bool check = true;
-        #pragma omp critical 
-        {
-          if (num_of_times_so_far < number_of_times) {
-            num_of_times_so_far += grid_size * block_size;
-          } else {
-            check = false;
-          }
-        }
-        cudaSetDevice(id);
-        int *d_rptrs, *d_cols;
-        double *d_p;
-        double *h_p = new double[grid_size * block_size];
+#pragma omp parallel num_threads(gpu_num + if_cpu)
+  {
+    
+    int tid = omp_get_thread_num();
+    int nt = omp_get_num_threads();
+    
+    unsigned long long last = curr_chunk;
+    
+#pragma omp barrier
+    
+    if (tid == gpu_num) {//CPU PART
+      
+      while (last < number_of_times) {
+	
+	p_partial[tid] += cpu_rasmussen_sparse(cptrs, rows, rptrs, cols, nov, rand(), cpu_chunk, calculation_threads);
+	p_partial_times[tid] += cpu_chunk;
 
-        cudaMalloc( &d_p, (grid_size * block_size) * sizeof(double));
+#pragma omp atomic update
+	curr_chunk += cpu_chunk;
+#pragma omp atomic read
+	last = curr_chunk;
+      }
+    }//CPU PART
+    else {//GPU PART
+      
+        cudaSetDevice(tid);
+
+	int grid_dim = grid_dims[tid];
+	int block_dim = block_dims[tid];
+
+	cudaStream_t thread_stream;
+	cudaStreamCreate(&thread_stream);
+	
+        int *d_rptrs, *d_cols;
+        C *d_p;
+        C *h_p = new C[grid_dim * block_dim];
+
+        //cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
         cudaMalloc( &d_rptrs, (nov + 1) * sizeof(int));
         cudaMalloc( &d_cols, (nnz) * sizeof(int));
-
+	
         cudaMemcpy( d_rptrs, rptrs, (nov + 1) * sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy( d_cols, cols, (nnz) * sizeof(int), cudaMemcpyHostToDevice);
-
-	int x;
-        while (check) {
-          double stt = omp_get_wtime();
-	  x = 1;
-          //kernel_rasmussen_sparse<<< grid_size , block_size , ((nnz + nov + 1)*sizeof(int)) >>> (d_rptrs, d_cols, d_p, nov, nnz, rand());
-          cudaDeviceSynchronize();
-          double enn = omp_get_wtime();
-          //cout << "kernel" << id << " in " << (enn - stt) << endl;
-	  printf("kernel %d in %f \n", id, enn - stt);
-
-          cudaMemcpy( h_p, d_p, grid_size * block_size * sizeof(double), cudaMemcpyDeviceToHost);
-
-          for (int i = 0; i < grid_size * block_size; i++) {
-            p_partial[id] += h_p[i];
+    
+	while (last < number_of_times) {
+	  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+	  
+          kernel_rasmussen_sparse<<< grid_dim , block_dim , size >>> (d_rptrs, d_cols, d_p, nov, nnz, rand());
+          cudaStreamSynchronize(thread_stream);
+          
+          cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+	  
+          for (int i = 0; i < grid_dim * block_dim; i++) {
+            p_partial[tid] += h_p[i];
           }
-          p_partial_times[id] += (grid_size * block_size);
-          #pragma omp critical 
-          {
-            if (num_of_times_so_far < number_of_times) {
-              num_of_times_so_far += grid_size * block_size;
-            } else {
-              check = false;
-            }
-          }
+          p_partial_times[tid] += grid_dim* block_dim;
+	  cudaFree(d_p);
+
+
+#pragma omp atomic update
+	  curr_chunk += gpu_chunks[tid];
+#pragma omp atomic read
+	  last = curr_chunk;
         }
-
+	
         cudaFree(d_rptrs);
         cudaFree(d_cols);
-        cudaFree(d_p);
+        //cudaFree(d_p);
         delete[] h_p;
-      }
-    }
-
-  for (int id = 0; id < gpu_num+1; id++) {
-    p += p_partial[id];
+    }//GPU PART
   }
+  
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
+    p += p_partial[dev];
+  }
+  
   double times = 0;
-  for (int id = 0; id < gpu_num+1; id++) {
-    times += p_partial_times[id];
+  for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
+    times += p_partial_times[dev];
   }
-
-  return p / times;
+  
+  
+  double duration = omp_get_wtime() - starttime;
+  printf("==SI== Actual Times: %d \n", (int)times);
+  double perman = p / times;
+  Result result(perman, duration);
+  return result;
 }
 
 template <class C, class S>
-extern Result gpu_perman64_approximation_sparse(SparseMatrix<S>* sparsemat, flags flags) {
-
+  extern Result gpu_perman64_approximation_sparse(SparseMatrix<S>* sparsemat, flags flags) {
+  
   //Pack parameters//
   int* cptrs = sparsemat->cptrs;
   int* rows = sparsemat->rows;
@@ -850,13 +893,14 @@ extern Result gpu_perman64_approximation_sparse(SparseMatrix<S>* sparsemat, flag
   Result result(perman, duration);
   return result;
   //return (p / (grid_dim * block_dim));
+
 }
 
 
 //In case of problem: SparseMatrix<int>* looks like enough for all cases
 template <class T>
 extern double gpu_perman64_approximation_multigpucpu_chunks_sparse(SparseMatrix<T>* sparsemat, flags flags) {
-
+  
   //Pack parameters//
   int* cptrs = sparsemat->cptrs;
   int* rows = sparsemat->rows;
@@ -865,7 +909,7 @@ extern double gpu_perman64_approximation_multigpucpu_chunks_sparse(SparseMatrix<
   int nov = sparsemat->nov;
   int nnz = sparsemat->nnz;
   //Pack parameters//
-
+  
   //Pack flags//
   int number_of_times = flags.number_of_times;
   int gpu_num = flags.gpu_num;
@@ -1008,32 +1052,33 @@ extern double gpu_perman64_approximation_multigpucpu_chunks_sparse(SparseMatrix<
 
 
 //Explicit instantiations required for separate compilation
+ 
+/////
+ template extern Result gpu_perman64_rasmussen_sparse<float, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_sparse<double, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_sparse<float, float>(SparseMatrix<float>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_sparse<double, float>(SparseMatrix<float>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_sparse<float, double>(SparseMatrix<double>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_sparse<double, double>(SparseMatrix<double>* sparsemat, flags flags);
+ /////
+ 
+ /////
+ template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, float>(SparseMatrix<float>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, float>(SparseMatrix<float>* sparsemat, flags flags);
+  template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float, double>(SparseMatrix<double>* sparsemat, flags flags);
+ template extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double, double>(SparseMatrix<double>* sparsemat, flags flags);
+/////
+
 
 /////
-template extern Result gpu_perman64_rasmussen_sparse<float, int>(SparseMatrix<int>* sparsemat, flags flags);
-template extern Result gpu_perman64_rasmussen_sparse<double, int>(SparseMatrix<int>* sparsemat, flags flags);
-template extern Result gpu_perman64_rasmussen_sparse<float, float>(SparseMatrix<float>* sparsemat, flags flags);
-template extern Result gpu_perman64_rasmussen_sparse<double, float>(SparseMatrix<float>* sparsemat, flags flags);
-template extern Result gpu_perman64_rasmussen_sparse<float, double>(SparseMatrix<double>* sparsemat, flags flags);
-template extern Result gpu_perman64_rasmussen_sparse<double, double>(SparseMatrix<double>* sparsemat, flags flags);
-/////
-
-/////
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse<int>(SparseMatrix<int>* sparsemat, flags flags);
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse<float>(SparseMatrix<float>* sparsemat, flags flags);
-template extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse<double>(SparseMatrix<double>* sparsemat, flags flags);
-/////
-
-
-/////
-template extern Result gpu_perman64_approximation_sparse<float, int>(SparseMatrix<int>* sparsemat, flags flags);
-template extern Result gpu_perman64_approximation_sparse<double, int>(SparseMatrix<int>* sparsemat, flags flags);
-
-template extern Result gpu_perman64_approximation_sparse<float, float>(SparseMatrix<float>* sparsemat, flags flags);
-template extern Result gpu_perman64_approximation_sparse<double, float>(SparseMatrix<float>* sparsemat, flags flags);
-
-template extern Result gpu_perman64_approximation_sparse<float, double>(SparseMatrix<double>* sparsemat, flags flags);
-template extern Result gpu_perman64_approximation_sparse<double, double>(SparseMatrix<double>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<float, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<double, int>(SparseMatrix<int>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<float, float>(SparseMatrix<float>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<double, float>(SparseMatrix<float>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<float, double>(SparseMatrix<double>* sparsemat, flags flags);
+ template extern Result gpu_perman64_approximation_sparse<double, double>(SparseMatrix<double>* sparsemat, flags flags);
 /////
 
 template extern double gpu_perman64_approximation_multigpucpu_chunks_sparse<int>(SparseMatrix<int>* sparsemat, flags flags);

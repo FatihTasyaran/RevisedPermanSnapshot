@@ -97,8 +97,8 @@ extern Result gpu_perman64_approximation_multigpucpu_chunks(DenseMatrix<S>* dens
 template <class C, class S>
 extern Result gpu_perman64_rasmussen_sparse(SparseMatrix<S>* sparsemat, flags flags);
 
-template <class T>
-extern double gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<T>* sparsemat, flags flags);
+template <class C, class S>
+extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<S>* sparsemat, flags flags);
 
 template <class C, class S>
 extern Result gpu_perman64_approximation_sparse(SparseMatrix<S>* sparsemat, flags flags);

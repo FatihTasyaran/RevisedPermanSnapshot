@@ -579,42 +579,51 @@ extern Result gpu_perman64_rasmussen_sparse(SparseMatrix<S>* sparsemat, flags fl
 
   cudaMalloc( &d_rptrs, (nov + 1) * sizeof(int));
   cudaMalloc( &d_cols, (nnz) * sizeof(int));
-  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  //cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
 
   cudaMemcpy( d_rptrs, rptrs, (nov + 1) * sizeof(int), cudaMemcpyHostToDevice);
   cudaMemcpy( d_cols, cols, (nnz) * sizeof(int), cudaMemcpyHostToDevice);
 
   srand(time(0));
-  //double stt = omp_get_wtime();
-  kernel_rasmussen_sparse<C><<<grid_dim ,block_dim ,size>>>(d_rptrs, d_cols, d_p, nov, nnz, rand());
-  cudaDeviceSynchronize();
-  //double enn = omp_get_wtime();
-  //cout << "kernel" << " in " << (enn - stt) << endl;
-  //printf("kernel in %f \n", enn - stt);
-  
-  
-  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 
-  cudaFree(d_rptrs);
-  cudaFree(d_cols);
-  cudaFree(d_p);
+  double one_run = grid_dim * block_dim;
+  double current = 0;
 
   double p = 0;
-  
-  #pragma omp parallel for num_threads(omp_get_max_threads()) reduction(+:p)
+
+  while(current < number_of_times){
+    cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+    
+    kernel_rasmussen_sparse<C><<<grid_dim ,block_dim ,size>>>(d_rptrs, d_cols, d_p, nov, nnz, rand());
+    cudaDeviceSynchronize();
+
+    cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+    
     for (int i = 0; i < grid_dim * block_dim; i++) {
       p += h_p[i];
     }
 
+    current += one_run;
+    cudaFree(d_p);
+  }
+      
+  
+  
+
+  cudaFree(d_rptrs);
+  cudaFree(d_cols);
+
   delete[] h_p;
 
-  double perman = p / (grid_dim * block_dim);
+  
+  printf("==SI== Actual Times: %d \n", (int)current);
+  
+  double perman = p / current;
   double duration = omp_get_wtime() - starttime;
   Result result(perman, duration);
   return result;
-
-
-  //return (p / (grid_dim * block_dim));
+  
 }
 
 template <class C, class S>

@@ -512,39 +512,45 @@ template <class C, class S>
   //and type
   C *h_p = new C[grid_dim * block_dim];
   
-  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  //cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
   cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
 
   cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
 
   srand(time(0));
-  
-  //double stt = omp_get_wtime();
-  kernel_rasmussen<C,S><<<grid_dim , block_dim , size>>> (d_mat, d_p, nov, rand());
-  cudaDeviceSynchronize();
-  //double enn = omp_get_wtime();
-  //cout << "kernel" << " in " << (enn - stt) << endl;
-  //printf("kernel in %f \n", enn - stt);
-  
-  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 
-  cudaFree(d_mat);
-  cudaFree(d_p);
+  double one_run = grid_dim * block_dim;
+  double current = 0;
 
   double p = 0;
-  #pragma omp parallel for num_threads(omp_get_max_threads()) reduction(+:p)
-  for (int i = 0; i < grid_dim * block_dim; i++) {
-    p += h_p[i];
+
+  while(current < number_of_times){
+
+    cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+    
+    kernel_rasmussen<C,S><<<grid_dim , block_dim , size>>> (d_mat, d_p, nov, rand());
+    cudaDeviceSynchronize();
+
+    cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+    for(int i = 0; i < grid_dim * block_dim; i++){
+      p += h_p[i];
+    }
+    current += one_run;
+    cudaFree(d_p);
   }
+
+  cudaFree(d_mat);
+  //cudaFree(d_p);
   
   delete[] h_p;
 
-  double perman = p / (grid_dim * block_dim);
+  printf("==SI== Actual Times: %d \n", int(current));
+  
+  double perman = p / current;
   double duration = omp_get_wtime() - starttime;
   Result result(perman, duration);
   return result;
-
-  //return (p / (grid_dim * block_dim));
 }
 
 template <class C, class S>
@@ -784,7 +790,7 @@ extern Result gpu_perman64_approximation(DenseMatrix<S>* densemat, flags flags) 
   C *d_p;
   C *d_r, *d_c;
 
-  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  //cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
   cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
   
   cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
@@ -794,25 +800,35 @@ extern Result gpu_perman64_approximation(DenseMatrix<S>* densemat, flags flags) 
   cudaMalloc( &d_r, (nov * grid_dim * block_dim) * sizeof(C));
   cudaMalloc( &d_c, (nov * grid_dim * block_dim) * sizeof(C));
 
-  //double stt = omp_get_wtime();
-  kernel_approximation<C,S><<<grid_dim, block_dim, size>>> (d_mat, d_p, d_r, d_c, nov, scale_intervals, scale_times, rand());
-  cudaDeviceSynchronize();
-  //double enn = omp_get_wtime();
-  //cout << "kernel" << " in " << (enn - stt) << endl;
-  //printf("kernel in %f \n", enn - stt);
-  
-  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 
+  double one_run = grid_dim * block_dim;
+  double current = 0;
+
+  double p = 0;
+
+  while(current < number_of_times){
+    cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+    
+    kernel_approximation<C,S><<<grid_dim, block_dim, size>>> (d_mat, d_p, d_r, d_c, nov, scale_intervals, scale_times, rand());
+    cudaDeviceSynchronize();
+
+    cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+    
+    for (int i = 0; i < grid_dim * block_dim; i++) {
+      p += h_p[i];
+    }
+
+    current += one_run;
+    cudaFree(d_p);
+  }
+  
+  
   cudaFree(d_mat);
-  cudaFree(d_p);
+  
   cudaFree(d_r);
   cudaFree(d_c);
 
-  double p = 0;
-  for (int i = 0; i < grid_dim * block_dim; i++) {
-    p += h_p[i];
-  }
-
+  
   delete[] h_p;
 
   double perman = p / (grid_dim * block_dim);

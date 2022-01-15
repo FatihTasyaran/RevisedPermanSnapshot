@@ -8,6 +8,7 @@
 
 #define BITARRSIZE 32
 
+template <class C>
 bool cpu_ScaleMatrix_sparse(int *cptrs,
 			    int *rows,
 			    int *rptrs,
@@ -15,15 +16,15 @@ bool cpu_ScaleMatrix_sparse(int *cptrs,
 			    int nov,
 			    int row_extracted[],
 			    int col_extracted[],
-			    double d_r[],
-			    double d_c[], 
+			    C d_r[],
+			    C d_c[], 
 			    int scale_times) {
   
   for (int k = 0; k < scale_times; k++) {
     
     for (int j = 0; j < nov; j++) {
       if (!((col_extracted[j / 32] >> (j % 32)) & 1)) {
-	double col_sum = 0;
+	C col_sum = 0;
 	int r;
 	for (int i = cptrs[j]; i < cptrs[j+1]; i++) {
 	  r = rows[i];
@@ -39,7 +40,7 @@ bool cpu_ScaleMatrix_sparse(int *cptrs,
     }
     for (int i = 0; i < nov; i++) {
       if (!((row_extracted[i / 32] >> (i % 32)) & 1)) {
-	double row_sum = 0;
+	C row_sum = 0;
 	int c;
 	for (int j = rptrs[i]; j < rptrs[i+1]; j++) {
 	  c = cols[j];
@@ -59,19 +60,20 @@ bool cpu_ScaleMatrix_sparse(int *cptrs,
   return true;
 }
 
-double cpu_rasmussen_sparse(int *cptrs,
-			    int *rows,
-			    int *rptrs,
-			    int *cols,
-			    int nov,
-			    int random,
-			    int number_of_times,
-			    int threads) {
-
+template <class C>
+C cpu_rasmussen_sparse(int *cptrs,
+		       int *rows,
+		       int *rptrs,
+		       int *cols,
+		       int nov,
+		       int random,
+		       int number_of_times,
+		       int threads) {
+  
   srand(random);
-
-  double sum_perm = 0;
-  double sum_zeros = 0;
+  
+  C sum_perm = 0;
+  C sum_zeros = 0;
     
   #pragma omp parallel for num_threads(threads) reduction(+:sum_perm) reduction(+:sum_zeros)
     for (int time = 0; time < number_of_times; time++) {
@@ -94,7 +96,7 @@ double cpu_rasmussen_sparse(int *cptrs,
         }
       }
       
-      double perm = 1;
+      C perm = 1;
       
       for (int k = 0; k < nov; k++) {
         // multiply permanent with number of nonzeros in the current row
@@ -114,13 +116,13 @@ double cpu_rasmussen_sparse(int *cptrs,
             }        
           }
         }
-
+	
         // exract the column
         col_extracted[col / 32] |= (1 << (col % 32));
         row_extracted[row / 32] |= (1 << (row % 32));
-
+	
         min = nov+1;
-
+	
         // update number of nonzeros of the rows after extracting the column
         bool zero_row = false;
         for (int i = cptrs[col]; i < cptrs[col+1]; i++) {
@@ -137,21 +139,22 @@ double cpu_rasmussen_sparse(int *cptrs,
             }
           }
         }
-
+	
         if (zero_row) {
           perm = 0;
           sum_zeros += 1;
           break;
         }
       }
-
+      
       sum_perm += perm;
     }
-  
-  return sum_perm;
+    
+    return sum_perm;
 }
 
-double cpu_approximation_perman64_sparse(int *cptrs,
+template <class C>
+C cpu_approximation_perman64_sparse(int *cptrs,
 					 int *rows,
 					 int *rptrs,
 					 int *cols,
@@ -164,8 +167,8 @@ double cpu_approximation_perman64_sparse(int *cptrs,
   
   srand(random);
   
-  double sum_perm = 0;
-  double sum_zeros = 0;
+  C sum_perm = 0;
+  C sum_zeros = 0;
   
 #pragma omp parallel for num_threads(threads) reduction(+:sum_perm) reduction(+:sum_zeros)
   for (int time = 0; time < number_of_times; time++) {
@@ -176,9 +179,9 @@ double cpu_approximation_perman64_sparse(int *cptrs,
       row_extracted[i]=0;
     }
     
-    double Xa = 1;
-    double d_r[nov];
-    double d_c[nov];
+    C Xa = 1;
+    C d_r[nov];
+    C d_c[nov];
     for (int i = 0; i < nov; i++) {
       d_r[i] = 1;
         d_c[i] = 1;
@@ -217,7 +220,7 @@ double cpu_approximation_perman64_sparse(int *cptrs,
         }
 
         // use scaled matrix for pj
-        double sum_row_of_S = 0;
+        C sum_row_of_S = 0;
         for (int i = rptrs[row]; i < rptrs[row+1]; i++) {
           int c = cols[i];
           if (!((col_extracted[c / 32] >> (c % 32)) & 1)) {
@@ -230,9 +233,9 @@ double cpu_approximation_perman64_sparse(int *cptrs,
           break;
         }
 
-        double random = (double(rand()) / RAND_MAX) * sum_row_of_S;
-        double temp = 0;
-        double s, pj;
+        C random = (C(rand()) / RAND_MAX) * sum_row_of_S;
+        C temp = 0;
+        C s, pj;
         int col;
         for (int i = rptrs[row]; i < rptrs[row+1]; i++) {
           int c = cols[i];
@@ -731,7 +734,7 @@ template <class C, class S>
       
       while (last < number_of_times) {
 	
-	p_partial[tid] += cpu_rasmussen_sparse(cptrs, rows, rptrs, cols, nov, rand(), cpu_chunk, calculation_threads);
+	p_partial[tid] += cpu_rasmussen_sparse<C>(cptrs, rows, rptrs, cols, nov, rand(), cpu_chunk, calculation_threads);
 	p_partial_times[tid] += cpu_chunk;
 
 #pragma omp atomic update
@@ -1030,7 +1033,7 @@ template <class C, class S>
 
 	//printf("CPU -- tid: % d -- last: %d \n", tid, last);
 	
-	cpu_approximation_perman64_sparse(cptrs, rows, rptrs, cols, nov, rand(), cpu_chunk, scale_intervals, scale_times, calculation_threads);
+	cpu_approximation_perman64_sparse<C>(cptrs, rows, rptrs, cols, nov, rand(), cpu_chunk, scale_intervals, scale_times, calculation_threads);
 	
 	p_partial_times[tid] += cpu_chunk;
 

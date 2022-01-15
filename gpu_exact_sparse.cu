@@ -38,7 +38,7 @@ void print_x(C* x, int nov){
 
 //Tailored for hybrid setting
 template <class C,class S>
-  double cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C* x, long long unsigned start, long long unsigned end) {
+  C cpu_perman64_sparse(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, int threads, C* x, long long unsigned start, long long unsigned end) {
   
   //Pack parameters//
   //S* mat = densemat->mat;
@@ -155,7 +155,7 @@ template <class C,class S>
 }
 
 template <class C, class S>
-  double cpu_perman64_skip(SparseMatrix<S>* sparsemat, int threads, C* x, long long unsigned start, long long unsigned end) {
+  C cpu_perman64_skip(SparseMatrix<S>* sparsemat, int threads, C* x, long long unsigned start, long long unsigned end) {
 
   //Pack parameters//
   int* rptrs = sparsemat->rptrs;
@@ -190,10 +190,10 @@ template <class C, class S>
       unsigned long long my_start = start + cid * chunk_size;
       unsigned long long my_end = min(start + ((cid+1) * chunk_size), end);
 
-#pragma omp critical
-      {
-	printf("start: %llu - end: %llu || cid: %d || tid: %d -- my_start: %llu - my_end: %llu \n", start, end, cid, tid, my_start, my_end);
-      }
+      //#pragma omp critical
+      //{
+      //printf("start: %llu - end: %llu || cid: %d || tid: %d -- my_start: %llu - my_end: %llu \n", start, end, cid, tid, my_start, my_end);
+      //}
       
       //update if neccessary
       C my_p = 0;
@@ -1520,7 +1520,7 @@ extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse(
   
   C p_partial[gpu_num + if_cpu]; //This is only used while calculating return value
 
-  printf("if_cpu: %d \n", if_cpu);
+  //printf("if_cpu: %d \n", if_cpu);
   
   for (int id = 0; id < gpu_num + if_cpu; id++) {
     p_partial[id] = 0;

@@ -667,8 +667,11 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_approximation_multigpucpu_chunks_sparse";
-      //This will change accordingly
-      perman = gpu_perman64_approximation_multigpucpu_chunks_sparse(sparsemat, flags);
+
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_approximation_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
+      else
+	result = gpu_perman64_approximation_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
 	
     } 
     else {
@@ -684,7 +687,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #ifdef STRUCTURAL
       exit(1);
 #endif
-
+      
       flags.algo_name = "gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks";
       if(flags.calculation_half_precision)
 	result = gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks<float, S>(densemat, flags);
@@ -787,8 +790,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #endif
 
       flags.algo_name = "gpu_perman_approximation_multigpucpu_chunks_sparse";
-      perman = gpu_perman64_approximation_multigpucpu_chunks_sparse(sparsemat, flags);
 
+
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_approximation_multigpucpu_chunks_sparse<float, S>(sparsemat, flags);
+      else
+	result = gpu_perman64_approximation_multigpucpu_chunks_sparse<double, S>(sparsemat, flags);
       
     }
   }
@@ -898,11 +905,12 @@ void RunPermanForGridGraphs(flags flags) {
       }
     } else if (perman_algo == 4) { // approximation_with_scaling
       for(int i = 0; i < no_repetition; i++){
-	start = omp_get_wtime();
-	perman = gpu_perman64_approximation_multigpucpu_chunks_sparse(sparsemat, flags);
-	end = omp_get_wtime();
-	printf("Result: gpu_perman64_approximation_multigpucpu_chunks_sparse %2lf in %lf\n", perman, end-start);
-	//cout << "Try: gpu_perman64_approximation_multigpucpu_chunks_sparse " << perman << " in " << (end - start) << endl;
+
+	if(flags.calculation_half_precision)
+	  result = gpu_perman64_approximation_multigpucpu_chunks_sparse<float, int>(sparsemat, flags);
+	else
+	  result = gpu_perman64_approximation_multigpucpu_chunks_sparse<double, int>(sparsemat, flags);
+
       }
     } else {
       cout << "Unknown Algorithm ID" << endl;
@@ -955,6 +963,8 @@ void RunPermanForGridGraphs(flags flags) {
     cout << "Unknown Algorithm ID" << endl;
   } 
 #endif
+
+  printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
   
   delete[] mat;
   delete[] cptrs;

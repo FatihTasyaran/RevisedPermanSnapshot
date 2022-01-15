@@ -66,6 +66,8 @@ extern Result gpu_perman64_xshared_coalescing_mshared_skipper(DenseMatrix<S>* de
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags flags);
 
+
+//Deprecated
 template <class T>
 extern double gpu_perman64_xshared_coalescing_mshared_multigpu_sparse_manual_distribution(DenseMatrix<T>* densemat, SparseMatrix<T>* sparsemat, flags flags);
 //##############~~#####//FUNCTIONS FROM: gpu_exact_sparse.cu//#####~~##############//
@@ -103,8 +105,8 @@ extern Result gpu_perman64_rasmussen_multigpucpu_chunks_sparse(SparseMatrix<S>* 
 template <class C, class S>
 extern Result gpu_perman64_approximation_sparse(SparseMatrix<S>* sparsemat, flags flags);
 
-template <class T>
-extern double gpu_perman64_approximation_multigpucpu_chunks_sparse(SparseMatrix<T>* sparsemat, flags flags);
+template <class C, class S>
+extern Result gpu_perman64_approximation_multigpucpu_chunks_sparse(SparseMatrix<S>* sparsemat, flags flags);
 
 //##############~~#####//FUNCTIONS FROM: gpu_approximation_sparse.cu//#####~~##############//
 

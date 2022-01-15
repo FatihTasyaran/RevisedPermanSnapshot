@@ -212,7 +212,7 @@ template <class C, class S>
       sum_perm += Xa;
     }
 
-    //printf("CPU Returning: %f \n", (double)sum_perm);
+    //xprintf("CPU Returning: %f \n", (double)sum_perm);
     return sum_perm;
 }
 
@@ -610,7 +610,7 @@ template <class C, class S>
   
   int if_cpu = (int)cpu;
   
-  unsigned long long cpu_chunk = if_cpu * (number_of_times / 1000);
+  unsigned long long cpu_chunk = if_cpu * (number_of_times / 100);
   unsigned long long gpu_chunks[gpu_num];
   
   for(int dev = 0; dev < gpu_num; dev++){
@@ -719,7 +719,7 @@ template <class C, class S>
   }
   
   double times = 0;
-  for (int id = 0; id < gpu_num+1; id++) {
+  for (int id = 0; id < gpu_num + if_cpu; id++) {
     times += p_partial_times[id];
   }
   
@@ -889,7 +889,7 @@ extern Result gpu_perman64_approximation_multigpucpu_chunks(DenseMatrix<S>* dens
 
   int if_cpu = (int)cpu;
 
-  unsigned long long cpu_chunk = if_cpu * (number_of_times / 1000);
+  unsigned long long cpu_chunk = if_cpu * (number_of_times / 100);
   unsigned long long gpu_chunks[gpu_num];
 
   for(int dev = 0; dev < gpu_num; dev++){

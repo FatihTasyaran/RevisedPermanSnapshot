@@ -34,6 +34,8 @@
 
 #include <cfenv>
 
+#include <unistd.h>
+#include <limits.h>
 //#define STRUCTURAL
 //#define HEAVYDEBUG
 
@@ -59,6 +61,8 @@ template<class S>
 Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flags, bool compressing);
 
 void print_flags(flags flags){
+  char hostname[HOST_NAME_MAX];
+  gethostname(hostname, HOST_NAME_MAX);
   //
   std::cout << "*~~~~~~~~~~~~FLAGS~~~~~~~~~~~~*" << std::endl;
   std::cout << "- cpu: " << flags.cpu << std::endl;
@@ -91,6 +95,7 @@ void print_flags(flags flags){
   std::cout << "- grid_multip: " << flags.grid_multip << std::endl;
   std::cout << "- compression: " << flags.compression << std::endl;
   std::cout << "- scaling_threshold: " << flags.scaling_threshold << std::endl;
+  std::cout << "- hostname: " << hostname << std::endl;
   std::cout << "*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
   //
 }
@@ -1326,7 +1331,13 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 
 
 int main (int argc, char **argv)
-{ 
+{
+  std::cout << "**command: ";
+  for(int i = 0 ; i < argc; i++){
+    std::cout << argv[i] << " ";
+  }
+  std::cout << std::endl;
+  
   bool generic = true;
   bool dense = true;
   bool approximation = false;

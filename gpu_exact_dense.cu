@@ -9,7 +9,7 @@ static int glob_sizeof_s;
 
 //This is a CPU helper kernel for hybrid setting
 template <class C, class S>
-double cpu_perman64(S* mat_t,
+C cpu_perman64(S* mat_t,
 		    C x[],
 		    int nov,
 		    long long start,
@@ -1141,7 +1141,7 @@ template <class C, class S>
 
   int if_cpu = (int)cpu;
 
-  printf("threads: %d | calculation_threads: %d | if_cpu: %d \n", threads, calculation_threads, if_cpu);
+  //printf("threads: %d | calculation_threads: %d | if_cpu: %d \n", threads, calculation_threads, if_cpu);
 
 
     
@@ -1205,7 +1205,7 @@ template <class C, class S>
       
       while(last < number_of_chunks){
 	
-	printf("thread %d Running CPU kernel, last: %d \n", tid, last);
+	//printf("thread %d Running CPU kernel, last: %d \n", tid, last);
 	
 	if (last == number_of_chunks - 1) {
 	  p_partial[tid] += cpu_perman64(mat_t, x, nov,
@@ -1261,7 +1261,7 @@ template <class C, class S>
       
       while (last < number_of_chunks) {
 
-	printf("thread %d Running GPU kernel, last: %d \n", tid, last);
+	//printf("thread %d Running GPU kernel, last: %d \n", tid, last);
 	
 	cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
 	
@@ -1386,7 +1386,7 @@ extern double gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distributi
       }
       cudaDeviceSynchronize();
       double enn = omp_get_wtime();
-      printf("Kernel in %f \n", enn - stt);
+      //printf("Kernel in %f \n", enn - stt);
       //cout << "kernel" << gpu_id << " in " << (enn - stt) << endl;
         
       cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(double), cudaMemcpyDeviceToHost);

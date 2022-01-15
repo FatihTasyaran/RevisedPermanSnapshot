@@ -178,7 +178,7 @@ template <class C, class S>
 
   int no_chunks = threads * 32;
   chunk_size = (end - start + 1) / no_chunks + 1;
-  printf("chunk_size: %llu \n", chunk_size);
+  //printf("chunk_size: %llu \n", chunk_size);
   
   #pragma omp parallel num_threads(threads) private(j, ci, change_j) 
   {
@@ -2006,7 +2006,7 @@ template <class C, class S>
 	while(last < number_of_chunks){
 	  
 	  cudaMalloc(&d_p, (grid_dim * block_dim) * sizeof(C));
-	  printf("tid: %d -- last: %d / %llu \n", tid, last, number_of_chunks);
+	  //printf("tid: %d -- last: %d / %llu \n", tid, last, number_of_chunks);
 	  
 	  if(last == number_of_chunks - 1){
 	      kernel_xshared_coalescing_mshared_skipper<C,S><<<grid_dim, block_dim, size>>>(d_rptrs,
@@ -2066,9 +2066,9 @@ template <class C, class S>
     
     double return_p = p;
 
-    for(int i = 0; i < gpu_num + if_cpu; i++){
-      printf("p_partial[%d]: %f \n", i, p_partial[i]);
-    }
+    //for(int i = 0; i < gpu_num + if_cpu; i++){
+    //printf("p_partial[%d]: %f \n", i, p_partial[i]);
+    //}
     
     for (int dev = 0; dev < gpu_num + if_cpu; dev++) {
       return_p += p_partial[dev];
@@ -2164,7 +2164,7 @@ double gpu_perman64_xshared_coalescing_mshared_multigpu_sparse_manual_distributi
       double enn = omp_get_wtime();
 
       //cout << "kernel" << gpu_id << " in " << (enn - stt) << endl;
-      printf("kernel %d in %f \n", gpu_id, enn - stt);
+      //printf("kernel %d in %f \n", gpu_id, enn - stt);
         
       cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(T), cudaMemcpyDeviceToHost);
 

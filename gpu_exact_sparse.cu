@@ -522,7 +522,8 @@ __global__ void kernel_xshared_coalescing_sparse(int* cptrs,
   C my_p = 0;
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
-
+  
+  
   for (int k = 0; k < (nov-1); k++) {
     if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
       for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
@@ -557,19 +558,30 @@ __global__ void kernel_xshared_coalescing_sparse(int* cptrs,
     s = ((one << k) & gray) ? 1 : -1;
       
     for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-      if (my_x[block_dim*rows[j] + thread_id] == 0) {
+      int row_id = rows[j];
+      S col_val = cvals[j];
+      C my_val = my_x[block_dim*row_id + thread_id];
+      
+      if (my_val == 0) {
         zero_num--;
-        my_x[block_dim*rows[j] + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        prod *= my_x[block_dim*rows[j] + thread_id];  //product of the elements in vector 'x'
-      } else {
-        prod /= my_x[block_dim*rows[j] + thread_id];
-        my_x[block_dim*rows[j] + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        if (my_x[block_dim*rows[j] + thread_id] == 0) {
-          zero_num++;
-        } else {
-          prod *= my_x[block_dim*rows[j] + thread_id];  //product of the elements in vector 'x'
-        }
-      }
+	my_val += s * col_val;
+        //my_x[block_dim*row_id + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+        //prod *= my_x[block_dim*row_id + thread_id];  //product of the elements in vector 'x'
+	prod *= my_val;
+      } else
+	{
+	  //prod /= my_x[block_dim*row_id + thread_id];
+	  prod /= my_val;
+	  //my_x[block_dim*row_id + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+	  my_val += s * col_val;
+	  if (my_val == 0) {
+	    zero_num++;
+	  } else
+	    {
+	      prod *= my_val;  //product of the elements in vector 'x'
+	    }
+	}
+      my_x[block_dim*row_id + thread_id] = my_val;
     }
 
     if(zero_num == 0) {
@@ -597,7 +609,7 @@ template <class C, class S>
 
   int thread_id = threadIdx.x;
   int block_dim = blockDim.x;
-
+  
   extern __shared__ double shared_mem[]; 
   C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
   int *shared_cptrs = (int*) &my_x[nov * block_dim]; // size = nov + 1
@@ -677,19 +689,28 @@ template <class C, class S>
     s = ((one << k) & gray) ? 1 : -1;
     
     for (int j = shared_cptrs[k]; j < shared_cptrs[k+1]; j++) {
-      if (my_x[block_dim*shared_rows[j] + thread_id] == 0) {
+      int row_id = shared_rows[j];
+      S col_val = shared_cvals[j];
+      C my_val = my_x[block_dim * row_id + thread_id];
+      if (my_val == 0) {
         zero_num--;
-        my_x[block_dim*shared_rows[j] + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        prod *= my_x[block_dim*shared_rows[j] + thread_id];  //product of the elements in vector 'x'
-      } else {
-        prod /= my_x[block_dim*shared_rows[j] + thread_id];
-        my_x[block_dim*shared_rows[j] + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        if (my_x[block_dim*shared_rows[j] + thread_id] == 0) {
+        //my_x[block_dim*row_id + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+	my_val += s * col_val;
+	prod *= my_val;
+        //prod *= my_x[block_dim*row_id + thread_id];  //product of the elements in vector 'x'
+      } else
+	{
+	  //prod /= my_x[block_dim*row_id + thread_id];
+	  prod /= my_val;
+	  //my_x[block_dim*row_id + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
+	  my_val += s * col_val;
+	  if (my_val == 0) {
           zero_num++;
         } else {
-          prod *= my_x[block_dim*shared_rows[j] + thread_id];  //product of the elements in vector 'x'
+          prod *= my_val;  //product of the elements in vector 'x'
         }
       }
+      my_x[block_dim * row_id + thread_id] = my_val;
     }
 
     if(zero_num == 0) {
@@ -1249,6 +1270,19 @@ template <class C, class S>
 						 xshared_coalescing_mshared_sparse_sharedmem,
 						 0);
 
+
+  //int power = 5;
+  //int real_block_dim = 0;
+  
+  //while(pow(2, power+1) < block_dim){
+  //power++;
+  //}
+
+  //block_dim = pow(2, power);
+  
+  
+  
+  
   size_t size = nov*block_dim*sizeof(C) + (nov+1)*sizeof(int) + total*sizeof(int) + total*sizeof(S) + sizeof(S);
 
   printf("==SC== Maximum Shared memory per block : %zu \n", max_shared_per_block);

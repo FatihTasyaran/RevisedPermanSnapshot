@@ -1196,7 +1196,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 #endif
     
     if(flags.compression && !compressing)
-      result = compress_singleton_and_then_recurse(densemat2, sparsemat2, flags);
+      result = compress_singleton_and_then_recurse(densemat2, sparsemat3, flags);
     else
       result = RunAlgo(densemat2, sparsemat3, flags, false);
     
@@ -1244,7 +1244,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     
     
     if(flags.compression && !compressing)
-      result = compress_singleton_and_then_recurse(densemat2, sparsemat2, flags);
+      result = compress_singleton_and_then_recurse(densemat2, sparsemat3, flags);
     else
       result = RunAlgo(densemat2, sparsemat3, flags, false);
 

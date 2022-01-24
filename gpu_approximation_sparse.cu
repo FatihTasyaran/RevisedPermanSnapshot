@@ -6,7 +6,7 @@
 #include "flags.h"
 #include "gpu_wrappers.h"
 
-#define BITARRSIZE 32
+#define BITARRSIZE 64
 
 template <class C>
 bool cpu_ScaleMatrix_sparse(int *cptrs,
@@ -295,18 +295,18 @@ __global__ void kernel_rasmussen_sparse(int* rptrs, int* cols, C* p, int nov, in
       shared_rptrs[block_dim * k + thread_id] = rptrs[block_dim * k + thread_id];
     }
   }
-
+  
   __syncthreads();
   
   curandState_t state; 
   curand_init(rand*tid,0,0,&state);
 
-  int col_extracted[BITARRSIZE]; //Yet another 21 and  
-  int row_extracted[BITARRSIZE]; //Yet another 21, tihs is bad, but otherwise is worse
+  int col_extracted[BITARRSIZE]; 
+  int row_extracted[BITARRSIZE]; 
   //In worst case, may move these arrays to shared memory
   for (int i = 0; i < BITARRSIZE; i++) {
-    col_extracted[i]=0;
-    row_extracted[i]=0;
+    col_extracted[i] = 0;
+    row_extracted[i] = 0;
   }
   
   C perm = 1;
@@ -338,10 +338,11 @@ __global__ void kernel_rasmussen_sparse(int* rptrs, int* cols, C* p, int nov, in
     }
     perm *= min_nnz;
 
+        
     // choose the column to be extracted randomly
     int random = curand_uniform(&state) / (1.0 / C(min_nnz));
     int col;
-
+    
     if (random >= min_nnz) {
       random = min_nnz - 1;
     }
@@ -356,14 +357,35 @@ __global__ void kernel_rasmussen_sparse(int* rptrs, int* cols, C* p, int nov, in
         }        
       }
     }
-
+    
     // exract the column
     col_extracted[col / 32] |= (1 << (col % 32));
     // exract the row
     row_extracted[row / 32] |= (1 << (row % 32));
   }
-
+  
   p[tid] = perm;
+  /*
+  if(p[tid] > 0)
+    printf("tid: %d | p[tid]: %f \n", tid, (double)p[tid]);
+
+
+  __syncthreads();
+  
+  if(tid == 0){
+    printf("col_extracted: \n");
+    for(int i = 0; i < BITARRSIZE; i++)
+      printf("%d ", col_extracted[i]);
+
+    printf("\n");
+    
+    printf("row_extracted: \n");
+    for(int i = 0; i < BITARRSIZE; i++)
+      printf("%d ", row_extracted[i]);
+
+    printf("\n");
+  }
+  */
 }
 
 template<class C>

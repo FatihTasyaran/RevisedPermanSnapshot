@@ -116,19 +116,23 @@ template <class C,class S>
       s = ((one << k) & gray) ? 1 : -1;
       
       for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-        if (my_x[rows[j]] == 0) {
+	int row_id = rows[j];
+	C my_val = my_x[row_id];
+	S col_val = cvals[j];
+        if (my_val == 0) {
           zero_num--;
-          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+          my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+          prod *= my_val;  //product of the elements in vector 'x'
         } else {
-          prod /= my_x[rows[j]];
-          my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-          if (my_x[rows[j]] == 0) {
+          prod /= my_val;
+          my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+          if (my_val == 0) {
             zero_num++;
           } else {
-            prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+            prod *= my_val;  //product of the elements in vector 'x'
           }
         }
+	my_x[row_id] = my_val;
       }
       
       if(zero_num == 0) {
@@ -369,19 +373,23 @@ __global__ void kernel_xlocal_sparse(int* cptrs,
     s = ((one << k) & gray) ? 1 : -1;
       
     for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-      if (my_x[rows[j]] == 0) {
+      int row_id = rows[j];
+      C my_val = my_x[row_id];
+      S col_val = cvals[j];
+      if (my_val == 0) {
         zero_num--;
-        my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+        my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+        prod *= my_val;  //product of the elements in vector 'x'
       } else {
-        prod /= my_x[rows[j]];
-        my_x[rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        if (my_x[rows[j]] == 0) {
+        prod /= my_val;
+        my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+        if (my_val == 0) {
           zero_num++;
         } else {
-          prod *= my_x[rows[j]];  //product of the elements in vector 'x'
+          prod *= my_val;  //product of the elements in vector 'x'
         }
       }
+      my_x[row_id] = my_val;
     }
 
     if(zero_num == 0) {
@@ -462,19 +470,24 @@ __global__ void kernel_xshared_sparse(int* cptrs,
     s = ((one << k) & gray) ? 1 : -1;
 
     for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
-      if (my_x[thread_id*nov + rows[j]] == 0) {
+      int row_id = rows[j];
+      int ind = thread_id*nov + row_id;
+      C my_val = my_x[ind];
+      S col_val = cvals[j];
+      if (my_val == 0) {
         zero_num--;
-        my_x[thread_id*nov + rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        prod *= my_x[thread_id*nov + rows[j]];  //product of the elements in vector 'x'
+        my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+        prod *= my_val;  //product of the elements in vector 'x'
       } else {
-        prod /= my_x[thread_id*nov + rows[j]];
-        my_x[thread_id*nov + rows[j]] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        if (my_x[thread_id*nov + rows[j]] == 0) {
+        prod /= my_val;
+        my_val += s * col_val; // see Nijenhuis and Wilf - update x vector entries
+        if (my_val == 0) {
           zero_num++;
         } else {
-          prod *= my_x[thread_id*nov + rows[j]];  //product of the elements in vector 'x'
+          prod *= my_val;  //product of the elements in vector 'x'
         }
       }
+      my_x[ind] = my_val;
     }
 
     if(zero_num == 0) {
@@ -556,23 +569,20 @@ __global__ void kernel_xshared_coalescing_sparse(int* cptrs,
     gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
     //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
     s = ((one << k) & gray) ? 1 : -1;
-      
+    
     for (int j = cptrs[k]; j < cptrs[k+1]; j++) {
       int row_id = rows[j];
+      int ind = block_dim*row_id + thread_id;
       S col_val = cvals[j];
-      C my_val = my_x[block_dim*row_id + thread_id];
+      C my_val = my_x[ind];
       
       if (my_val == 0) {
         zero_num--;
 	my_val += s * col_val;
-        //my_x[block_dim*row_id + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
-        //prod *= my_x[block_dim*row_id + thread_id];  //product of the elements in vector 'x'
 	prod *= my_val;
       } else
 	{
-	  //prod /= my_x[block_dim*row_id + thread_id];
 	  prod /= my_val;
-	  //my_x[block_dim*row_id + thread_id] += s * cvals[j]; // see Nijenhuis and Wilf - update x vector entries
 	  my_val += s * col_val;
 	  if (my_val == 0) {
 	    zero_num++;
@@ -581,7 +591,7 @@ __global__ void kernel_xshared_coalescing_sparse(int* cptrs,
 	      prod *= my_val;  //product of the elements in vector 'x'
 	    }
 	}
-      my_x[block_dim*row_id + thread_id] = my_val;
+      my_x[ind] = my_val;
     }
 
     if(zero_num == 0) {
@@ -690,19 +700,16 @@ template <class C, class S>
     
     for (int j = shared_cptrs[k]; j < shared_cptrs[k+1]; j++) {
       int row_id = shared_rows[j];
+      int ind = block_dim * row_id + thread_id;
       S col_val = shared_cvals[j];
-      C my_val = my_x[block_dim * row_id + thread_id];
+      C my_val = my_x[ind];
       if (my_val == 0) {
         zero_num--;
-        //my_x[block_dim*row_id + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
 	my_val += s * col_val;
 	prod *= my_val;
-        //prod *= my_x[block_dim*row_id + thread_id];  //product of the elements in vector 'x'
       } else
 	{
-	  //prod /= my_x[block_dim*row_id + thread_id];
 	  prod /= my_val;
-	  //my_x[block_dim*row_id + thread_id] += s * shared_cvals[j]; // see Nijenhuis and Wilf - update x vector entries
 	  my_val += s * col_val;
 	  if (my_val == 0) {
           zero_num++;
@@ -710,7 +717,7 @@ template <class C, class S>
           prod *= my_val;  //product of the elements in vector 'x'
         }
       }
-      my_x[block_dim * row_id + thread_id] = my_val;
+      my_x[ind] = my_val;
     }
 
     if(zero_num == 0) {
@@ -762,13 +769,13 @@ __global__ void kernel_xshared_coalescing_mshared_skipper(int* rptrs,
     shared_rows[k] = rows[k];
     shared_cvals[k] = cvals[k];
   }
-
+  
   __syncthreads();
-
+  
   long long number_of_threads = blockDim.x * gridDim.x;
-
+  
   long long chunk_size = (end - start) / number_of_threads + 1;
-
+  
   long long my_start = start + tid * chunk_size;
   long long my_end = min(start + ((tid+1) * chunk_size), end);
   
@@ -777,7 +784,7 @@ __global__ void kernel_xshared_coalescing_mshared_skipper(int* rptrs,
   long long i = my_start;
   long long prev_gray = 0;
   long long gray;
-
+  
   int zero_num = 0;
   for (int j = 0; j < nov; j++) {
     if (my_x[block_dim*j + thread_id] == 0) {
@@ -786,7 +793,7 @@ __global__ void kernel_xshared_coalescing_mshared_skipper(int* rptrs,
       prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
     }
   }
-    
+  
   long long gray_diff;
   unsigned long long ci, period, steps, step_start;
   double change_j;
@@ -794,7 +801,7 @@ __global__ void kernel_xshared_coalescing_mshared_skipper(int* rptrs,
   while (i < my_end) {
     gray = i ^ (i >> 1);
     gray_diff = prev_gray ^ gray;
-
+    
     j = 0;
     while(gray_diff > 0) { // this contains the bit to be updated
       long long onej = 1LL << j;

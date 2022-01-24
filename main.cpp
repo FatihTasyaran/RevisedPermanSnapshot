@@ -1435,6 +1435,7 @@ int main (int argc, char **argv)
 	break;
       case 'a':
         flags.approximation = true;
+	flags.binary_graph = true;
 	flags.exact = false;
         break;
       case 'g':

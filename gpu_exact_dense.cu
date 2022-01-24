@@ -195,29 +195,29 @@ __global__ void kernel_xlocal(S* mat_t, C* x, C* p, int nov) {
       }
     }
   }
-    
+  
   long long gray_diff;
   int k;
-
+  
   int prodSign = 1;
   if(i & 1LL) {
     prodSign = -1;
   }
-
+  
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
     k = __ffsll(gray_diff) - 1;
     gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
     //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
     s = ((one << k) & gray) ? 1 : -1;
-      
+    
     prod = 1.0;
     xptr = (C*)my_x;
     for (int j = 0; j < nov; j++) {
       *xptr += s * mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
       prod *= *xptr++;  //product of the elements in vector 'x'
     }
-
+    
     my_p += prodSign * prod; 
     prodSign *= -1;
     i++;

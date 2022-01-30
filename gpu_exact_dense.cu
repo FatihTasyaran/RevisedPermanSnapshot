@@ -326,7 +326,7 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
     if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
       for (int j = 0; j < nov; j++) {
         //my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
-	my_x[block_dim*j + thread_id] += tex1Dfetch<int>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
+	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
       }
     }
   }
@@ -348,8 +348,9 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
       
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      my_x[block_dim*j + thread_id] += s * tex1Dfetch<int>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
-      printf("tid: %d fetched: %d \n ", tid, tex1Dfetch<int>(mat_t, (k*nov)+j));
+      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
+      //float zz = tex1Dfetch<float>(mat_t, (k*nov)+j);
+      //printf("tid: %d -- zz: %f \n ", tid, zz);
       prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
     }
 
@@ -780,7 +781,6 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   cudaSetDevice(device_id);
   cudaDeviceSynchronize();
 
-  double starttime = omp_get_wtime();
   
   C x[nov]; 
   C rs; //row sum
@@ -820,45 +820,49 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   }
   
   //create the transpose of the matrix
-  S* mat_t = new S[nov * nov];
+  float* mat_t = new float[nov * nov];
   for (int i = 0; i < nov; i++) {
     for (int j = 0; j < nov; j++) {
-      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+      mat_t[(i * nov) + j] = (float)mat[(j * nov) + i];
+      //printf("mat_t[%d]: %f \n", (i*nov) + j, mat_t[(i*nov+j)]);
     }
   }
   
-  S *d_mat_t;
+  
+  //S *d_mat_t;
   C *d_x, *d_p;
   C *h_p = new C[grid_dim * block_dim];
 
   cudaMalloc( &d_x, (nov) * sizeof(C));
   cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
-  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+  //cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
 
   cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
-  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+  //cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
 
   //Texture object
-  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<S>();
-  cudaArray* mat_t_Array;
-  cudaMallocArray(&mat_t_Array, &channelDesc, nov*nov);
-  cudaMemcpy2DToArray(mat_t_Array, 0, 0, mat_t, (nov*nov)*sizeof(S),
-		      (nov*nov)*sizeof(S), 1, cudaMemcpyDeviceToHost);
-  
+  float* buffer;
+  cudaMalloc(&buffer, nov*nov*sizeof(float));
+  cudaMemcpy(buffer, mat_t, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
   
   cudaResourceDesc resDesc;
   memset(&resDesc, 0 , sizeof(resDesc));
-  resDesc.resType = cudaResourceTypeArray;
-  resDesc.res.array.array = mat_t_Array;
+  resDesc.resType = cudaResourceTypeLinear;
+  resDesc.res.linear.devPtr = buffer;
+  resDesc.res.linear.desc.f = cudaChannelFormatKindFloat;
+  resDesc.res.linear.desc.x = 32; // bits per channel
+  resDesc.res.linear.sizeInBytes = nov*nov*sizeof(float);
 
   cudaTextureDesc texDesc;
   memset(&texDesc, 0, sizeof(texDesc));
   texDesc.readMode = cudaReadModeElementType;
-  //1texDesc.addressMode = cudaAddressModeBorder;
-  
+  //texDesc.normalizedCoords = 0;
+    
   cudaTextureObject_t tex = 0;
   cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL);
   
+  double starttime = omp_get_wtime();
   
   kernel_xshared_coalescing<C,S><<<grid_dim , block_dim , size>>> (tex, d_x, d_p, nov);
   cudaDeviceSynchronize();
@@ -867,7 +871,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   
   cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 
-  cudaFree(d_mat_t);
+  //cudaFree(d_mat_t);
   cudaFree(d_x);
   cudaFree(d_p);
 

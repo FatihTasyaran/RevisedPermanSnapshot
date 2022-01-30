@@ -227,14 +227,14 @@ __global__ void kernel_xlocal(S* mat_t, C* x, C* p, int nov) {
 }
 
 template <class C, class S>
-__global__ void kernel_xshared(S* mat_t, C* x, C* p, int nov) {
+  __global__ void kernel_xshared(S* mat_t, C* x, C* p, int nov, int alloc_nov) {
   int tid = threadIdx.x + (blockIdx.x * blockDim.x);
   int thread_id = threadIdx.x;
 
   extern __shared__ double shared_mem[]; 
   C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
 
-  for (int k = 0; k < nov; k++) {
+  for (int k = 0; k < alloc_nov; k++) {
     my_x[thread_id*nov + k] = x[k];
   }
   
@@ -293,7 +293,7 @@ __global__ void kernel_xshared(S* mat_t, C* x, C* p, int nov) {
 }
 
 template <class C, class S>
-__global__ void kernel_xshared_coalescing(S* mat_t, C* x, C* p, int nov) {
+__global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p, int nov) {
   int tid = threadIdx.x + (blockIdx.x * blockDim.x);
   int thread_id = threadIdx.x;
   int block_dim = blockDim.x;
@@ -321,11 +321,12 @@ __global__ void kernel_xshared_coalescing(S* mat_t, C* x, C* p, int nov) {
   C my_p = 0;
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
-
+  
   for (int k = 0; k < (nov-1); k++) {
     if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
       for (int j = 0; j < nov; j++) {
-        my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+        //my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+	my_x[block_dim*j + thread_id] += tex1Dfetch<int>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
       }
     }
   }
@@ -347,7 +348,8 @@ __global__ void kernel_xshared_coalescing(S* mat_t, C* x, C* p, int nov) {
       
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      my_x[block_dim*j + thread_id] += s * mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      my_x[block_dim*j + thread_id] += s * tex1Dfetch<int>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
+      printf("tid: %d fetched: %d \n ", tid, tex1Dfetch<int>(mat_t, (k*nov)+j));
       prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
     }
 
@@ -654,6 +656,10 @@ template <class C, class S>
   cudaSetDevice(device_id);
   cudaDeviceSynchronize();
 
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device_id);
+  printf("++Read Only: %zu \n", prop.totalConstMem);
+
   double starttime = omp_get_wtime();
 
   C x[nov]; 
@@ -670,19 +676,32 @@ template <class C, class S>
     p *= x[j];   // product of the elements in vector 'x'
   }
 
+  
+  int access_nov, alloc_nov;
+
+  if(nov % 2 == 0){
+    access_nov = nov;
+    alloc_nov = nov + 1;
+  }
+  else{
+    access_nov = nov;
+    alloc_nov = nov + 1;
+  }
+  
   //For variable smem
-  glob_nov = nov;
+  glob_nov = alloc_nov;
   glob_sizeof_c = sizeof(C);
   glob_sizeof_s = sizeof(S);
   //For variable smem
-
+  
   cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
                                                  &block_dim,
                                                  &kernel_xshared<C,S>,
                                                  xshared_sharedmem,
                                                  0);
 
-  size_t size = nov*block_dim*sizeof(C);
+  size_t size = alloc_nov*block_dim*sizeof(C);
+  
   
   printf("==SC== Shared memory per block is set to : %zu \n", size);
   printf("==SC== Grid dim is set to : %d \n", grid_dim);
@@ -714,7 +733,7 @@ template <class C, class S>
   cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
   
   //double stt = omp_get_wtime();
-  kernel_xshared<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov);
+  kernel_xshared<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov, alloc_nov);
   cudaDeviceSynchronize();
   //double enn = omp_get_wtime();
   //printf("Kernel in %f \n", enn - stt);
@@ -807,7 +826,6 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
       mat_t[(i * nov) + j] = mat[(j * nov) + i];
     }
   }
-
   
   S *d_mat_t;
   C *d_x, *d_p;
@@ -820,12 +838,32 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
   cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
 
-  //double stt = omp_get_wtime();
-  kernel_xshared_coalescing<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov);
+  //Texture object
+  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<S>();
+  cudaArray* mat_t_Array;
+  cudaMallocArray(&mat_t_Array, &channelDesc, nov*nov);
+  cudaMemcpy2DToArray(mat_t_Array, 0, 0, mat_t, (nov*nov)*sizeof(S),
+		      (nov*nov)*sizeof(S), 1, cudaMemcpyDeviceToHost);
+  
+  
+  cudaResourceDesc resDesc;
+  memset(&resDesc, 0 , sizeof(resDesc));
+  resDesc.resType = cudaResourceTypeArray;
+  resDesc.res.array.array = mat_t_Array;
+
+  cudaTextureDesc texDesc;
+  memset(&texDesc, 0, sizeof(texDesc));
+  texDesc.readMode = cudaReadModeElementType;
+  //1texDesc.addressMode = cudaAddressModeBorder;
+  
+  cudaTextureObject_t tex = 0;
+  cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL);
+  
+  
+  kernel_xshared_coalescing<C,S><<<grid_dim , block_dim , size>>> (tex, d_x, d_p, nov);
   cudaDeviceSynchronize();
-  //double enn = omp_get_wtime();
-  //printf("Kernel in %f \n", enn - stt);
-  //cout << "kernel" << " in " << (enn - stt) << endl;
+
+  
   
   cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 

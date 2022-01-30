@@ -1179,7 +1179,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     std::cout << "Swapped mat type: double" << std::endl;
 #endif
     
-    delete densemat;
+    //delete densemat;
     //delete sparsemat;
     
     SparseMatrix<double>* sparsemat2 = create_sparsematrix_from_densemat2(densemat2, flags);
@@ -1226,7 +1226,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 #endif
 
     
-    delete densemat;
+    //delete densemat;
     delete sparsemat;
     
     SparseMatrix<float>* sparsemat2 = create_sparsematrix_from_densemat2(densemat2, flags);

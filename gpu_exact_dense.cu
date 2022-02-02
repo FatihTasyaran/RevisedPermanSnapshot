@@ -316,17 +316,16 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
   long long my_start = start + tid * chunk_size;
   long long my_end = min(start + ((tid+1) * chunk_size), end);
   
-  C s;  //+1 or -1 
-  C prod; //product of the elements in vector 'x'
+  C s;  
+  C prod; 
   C my_p = 0;
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
   
   for (int k = 0; k < (nov-1); k++) {
-    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+    if ((gray >> k) & 1LL) { 
       for (int j = 0; j < nov; j++) {
-        //my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
-	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
+	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (j*nov)+k); 
       }
     }
   }
@@ -342,16 +341,15 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
     k = __ffsll(gray_diff) - 1;
-    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
-    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    gray ^= (one << k); 
     s = ((one << k) & gray) ? 1 : -1;
       
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
-      //float zz = tex1Dfetch<float>(mat_t, (k*nov)+j);
-      //printf("tid: %d -- zz: %f \n ", tid, zz);
-      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+      //printf("tid: %d | i: %lld | x: %d | t: %d \n", tid, i, (block_dim*j) + thread_id, (k*nov) +j) \
+;
+      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k); 
+      prod *= my_x[block_dim*j + thread_id];  
     }
 
     my_p += prodSign * prod; 
@@ -844,7 +842,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   //Texture object
   float* buffer;
   cudaMalloc(&buffer, nov*nov*sizeof(float));
-  cudaMemcpy(buffer, mat_t, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(buffer, mat, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
   
   cudaResourceDesc resDesc;
   memset(&resDesc, 0 , sizeof(resDesc));
@@ -861,6 +859,8 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
     
   cudaTextureObject_t tex = 0;
   cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL);
+
+  printf("==WARNING== TEX \n");
   
   double starttime = omp_get_wtime();
   

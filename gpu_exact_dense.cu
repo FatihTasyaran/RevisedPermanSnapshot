@@ -322,9 +322,9 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
   
-  for (int k = 0; k < (nov-1); k++) {
-    if ((gray >> k) & 1LL) { 
-      for (int j = 0; j < nov; j++) {
+  for (int j = 0; j < nov; j++) {
+    for (int k = 0; k < (nov-1); k++) {
+      if ((gray >> k) & 1LL) { 
 	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (j*nov)+k); 
       }
     }

@@ -7,6 +7,16 @@ static int glob_nov;
 static int glob_sizeof_c;
 static int glob_sizeof_s;
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 //This is a CPU helper kernel for hybrid setting
 template <class C, class S>
 C cpu_perman64(S* mat_t,
@@ -293,7 +303,9 @@ template <class C, class S>
 }
 
 template <class C, class S>
-__global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p, int nov) {
+__global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
+					  cudaTextureObject_t tex4,
+					  C* x, C* p, int nov) {
   int tid = threadIdx.x + (blockIdx.x * blockDim.x);
   int thread_id = threadIdx.x;
   int block_dim = blockDim.x;
@@ -316,23 +328,28 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
   long long my_start = start + tid * chunk_size;
   long long my_end = min(start + ((tid+1) * chunk_size), end);
   
-  C s;  //+1 or -1 
-  C prod; //product of the elements in vector 'x'
+  C s;  
+  C prod; 
   C my_p = 0;
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
   
-  for (int k = 0; k < (nov-1); k++) {
-    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
-      for (int j = 0; j < nov; j++) {
-        //my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
-	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
+  float* fetched;
+  int div;
+  int mod;
+  int ind;
+  
+  for (int j = 0; j < nov; j++) {
+    fetched = (float*)&tex1Dfetch<float4>(tex4, j);
+    for (int k = 0; k < (nov-1); k++) {
+      if ((gray >> k) & 1LL) {
+	my_x[block_dim*j + thread_id] += fetched[k];
       }
     }
   }
-  
-  long long gray_diff;
-  int k;
+
+long long gray_diff;
+int k;
 
   int prodSign = 1;
   if(i & 1LL) {
@@ -342,16 +359,15 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t, C* x, C* p,
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
     k = __ffsll(gray_diff) - 1;
-    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
-    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    gray ^= (one << k); 
     s = ((one << k) & gray) ? 1 : -1;
       
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (k*nov)+j); // see Nijenhuis and Wilf - update x vector entries
-      //float zz = tex1Dfetch<float>(mat_t, (k*nov)+j);
-      //printf("tid: %d -- zz: %f \n ", tid, zz);
-      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+      //if(tid < 64)
+      //printf("tid: %d | k: %d |i: %lld | x: %d | t: %d \n", tid, k, i, (block_dim*j) + thread_id, (j*nov) +k);
+      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k); 
+      prod *= my_x[block_dim*j + thread_id];  
     }
 
     my_p += prodSign * prod; 
@@ -763,6 +779,32 @@ template <class C, class S>
   //return((4*(nov&1)-2) * p);
 }
 
+void make4_help(float* mat, float4* host4, int nov, int f4size){
+
+  float x, y, z, w;
+  
+  for(int i = 0; i < f4size - 1; i+=4){
+    x = mat[i];
+    y = mat[i+1];
+    z = mat[i+2];
+    w = mat[i+3];
+    host4[i/4] = make_float4(x,y,z,w);
+  }
+
+  int last = (f4size*4) - nov -1;
+
+  float arr[4];
+  
+  for(int i = 0; i < 4; i++){
+    if(i < last)
+      arr[i] = mat[(f4size*4)+i];
+    else
+      arr[i] = 0;
+  }
+
+  host4[f4size] = make_float4(arr[0], arr[1], arr[2], arr[3]);
+}
+
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags flags) {
   
@@ -820,10 +862,10 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   }
   
   //create the transpose of the matrix
-  float* mat_t = new float[nov * nov];
+  float* f_mat = new float[nov * nov];
   for (int i = 0; i < nov; i++) {
     for (int j = 0; j < nov; j++) {
-      mat_t[(i * nov) + j] = (float)mat[(j * nov) + i];
+      f_mat[(i * nov) + j] = (float)mat[(i * nov) + j];
       //printf("mat_t[%d]: %f \n", (i*nov) + j, mat_t[(i*nov+j)]);
     }
   }
@@ -844,7 +886,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   //Texture object
   float* buffer;
   cudaMalloc(&buffer, nov*nov*sizeof(float));
-  cudaMemcpy(buffer, mat_t, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(buffer, mat, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
   
   cudaResourceDesc resDesc;
   memset(&resDesc, 0 , sizeof(resDesc));
@@ -861,10 +903,41 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
     
   cudaTextureObject_t tex = 0;
   cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL);
+
+  printf("==WARNING== TEX \n");
+
+  //F4 TEXTURE
+  int f4size = ((nov*nov)/4) + 1;
+  float4* host4 = new float4[f4size];
+  make4_help(f_mat, host4, nov*nov, f4size);
+  size_t size4 = f4size * sizeof(float4);//float4* ?
+  printf("size4: %zu \n", size4);
+  float4* buffer4 = 0;
+  gpuErrchk ( cudaMalloc((void**)&buffer4, f4size) );
+  //cudaMemcpy(buffer4, host4, size4, cudaMemcpyHostToDevice);
+
+  cudaResourceDesc resDesc4;
+  memset(&resDesc4, 0, sizeof(resDesc4));
+  resDesc4.res.linear.devPtr = buffer4;
+  resDesc4.res.linear.desc.f = cudaChannelFormatKindFloat;
+  resDesc4.res.linear.desc.x = 32; // bits per channel
+  resDesc4.res.linear.desc.y = 32; // bits per channel
+  resDesc4.res.linear.desc.z = 32; // bits per channel
+  resDesc4.res.linear.desc.w = 32; // bits per channel
+  resDesc4.res.linear.sizeInBytes = size4;
+
+  cudaTextureDesc texDesc4;
+  memset(&texDesc, 0, sizeof(texDesc4));
+  texDesc.readMode = cudaReadModeElementType;
+  //texDesc.normalizedCoords = 0;
+  
+  cudaTextureObject_t tex4 = 0;
+  cudaCreateTextureObject(&tex4, &resDesc4, &texDesc4, NULL);
+  
   
   double starttime = omp_get_wtime();
   
-  kernel_xshared_coalescing<C,S><<<grid_dim , block_dim , size>>> (tex, d_x, d_p, nov);
+  kernel_xshared_coalescing<C,S><<<grid_dim , block_dim , size>>> (tex, tex4, d_x, d_p, nov);
   cudaDeviceSynchronize();
 
   
@@ -874,15 +947,18 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   //cudaFree(d_mat_t);
   cudaFree(d_x);
   cudaFree(d_p);
-
+  cudaFree(buffer);
+  cudaFree(buffer4);
+  
   double return_p = p;
   
   for (int i = 0; i < grid_dim * block_dim; i++) {
     return_p += (double)h_p[i];
   }
 
-  delete [] mat_t;
+  delete [] f_mat;
   delete[] h_p;
+  delete[] host4;
 
   double perman = (4*(nov&1)-2) * return_p;
   double duration = omp_get_wtime() - starttime;

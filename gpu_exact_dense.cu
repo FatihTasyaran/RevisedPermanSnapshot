@@ -312,6 +312,7 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
 					  C* x, C* p, int nov) {
   int tid = threadIdx.x + (blockIdx.x * blockDim.x);
   int thread_id = threadIdx.x;
+  int lane_id = thread_id % 32;
   int block_dim = blockDim.x;
 
   extern __shared__ double shared_mem[]; 
@@ -338,31 +339,7 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   long long i = my_start;
   long long gray = (i-1) ^ ((i-1) >> 1);
   
-  float* fetched;
-  int div;
-  int mod;
-  int ind;
-
-  if(tid == 0){
-
-    for(int j = 0; j < nov; j++){
-      for(int k = 0; k < nov; k++){
-	float fetch = tex1Dfetch<float>(mat_t, (j*nov)+k);
-	int ind = (j*nov + k) / 4;
-	int mod = (j*nov + k) % 4;
-        float* fetch2 = (float*)&tex1Dfetch<float4>(tex4, ind);
-	printf("j: %d - k: %d -- fetched: %f -- float4mod: %f \n", j, k, fetch, fetch2[mod]);
-	//for(int i = 0; i < 4; i++){
-	//printf("float4[%d]: %f ", i, fetch2[i]);
-	//}
-	//printf("\n");
-      }
-    }
-    
-  }
-  __syncthreads();
   
-
   
   for (int k = 0; k < (nov-1); k++) {
     if ((gray >> k) & 1LL) { 
@@ -382,7 +359,8 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
     prodSign = -1;
   }
   
-  int wave = 0;
+  float4 cast_ptr;
+  float my_floats[4];
   
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
@@ -392,17 +370,24 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
     
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      //if(tid < 32 && wave < 500){
-      //int ind = (j*nov) / 4;
-      //int mod = (j*nov) % 4;
-      //fetched = (float*)&tex1Dfetch<float4>(tex4, ind);
-      //float mat_val = tex1Dfetch<float>(mat_t, (j*nov)+0);
-      //printf("tid: %d -- fetched: %f - %f - %f - %f -- val: %f \n", tid, fetched[0], fetched[1], fetched[2], fetched[3], mat_val);
-      //wave++;
-      //}
+      if(lane_id == 0){
+	cast_ptr = tex1Dfetch<float4>(tex4, j*2);
+	my_floats[0] = cast_ptr.x;
+	my_floats[1] = cast_ptr.y;
+	my_floats[2] = cast_ptr.z;
+	my_floats[3] = cast_ptr.w;
+      }
+      __syncwarp();
+
+      for(int r = 0; r < 4; r++){
+	my_floats[r] = __shfl_sync(0xFFFFFFFF, my_floats[r], 0);
+      }
+
+      if(k < 4)
+	my_x[block_dim*j + thread_id] += s * my_floats[k];
+      else
+	my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k);
       
-      
-      my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k); 
       prod *= my_x[block_dim*j + thread_id];  
     }
     
@@ -817,28 +802,21 @@ template <class C, class S>
 
 void make4_help(float* mat, float4* host4, int nov, int f4size){
 
-  float x, y, z, w;
+  float x, y, z, w, x1, y1, z1, w1;
   
-  for(int i = 0; i < nov - 2; i+=4){
-    x = mat[i];
-    y = mat[i+1];
-    z = mat[i+2];
-    w = mat[i+3];
-    host4[i/4] = make_float4(x,y,z,w);
+  for(int i = 0; i < nov; i++){
+    x = mat[i*nov + 0];
+    y = mat[i*nov + 1];
+    z = mat[i*nov + 2];
+    w = mat[i*nov + 3];
+    x1 = mat[i*nov + 4];
+    y1 = mat[i*nov + 5];
+    z1 = mat[i*nov + 6];
+    w1 = mat[i*nov + 7];
+    host4[i*2] = make_float4(x,y,z,w);
+    host4[i*2 + 1] = make_float4(x1,y1,z1,w1);
   }
 
-  int last = (f4size*4) - nov -1;
-
-  float arr[4];
-  
-  for(int i = 0; i < 4; i++){
-    if(i < last)
-      arr[i] = mat[(f4size*4)+i];
-    else
-      arr[i] = 0;
-  }
-
-  host4[f4size - 1] = make_float4(arr[0], arr[1], arr[2], arr[3]);
 }
 
 template <class C, class S>
@@ -859,7 +837,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   cudaSetDevice(device_id);
   cudaDeviceSynchronize();
   
-  int f4size = ((nov*nov)/4) + 1;
+  int f4size = nov * 2;
   size_t size4 = f4size * sizeof(float4);
   //printf("size4: %zu \n", size4);
   
@@ -958,7 +936,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   //F4 TEXTURE
   //int f4size = ((nov*nov)/4) + 1;
   float4* host4 = new float4[f4size];
-  make4_help(f_mat, host4, nov*nov, f4size);
+  make4_help(f_mat, host4, nov, f4size);
   //size_t size4 = f4size * sizeof(float4);//float4* ?
   //printf("size4: %zu \n", size4);
   //float4* buffer4 = 0;

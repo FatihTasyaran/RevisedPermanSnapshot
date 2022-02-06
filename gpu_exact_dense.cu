@@ -343,6 +343,26 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   int mod;
   int ind;
 
+  if(tid == 0){
+
+    for(int j = 0; j < nov; j++){
+      for(int k = 0; k < nov; k++){
+	float fetch = tex1Dfetch<float>(mat_t, (j*nov)+k);
+	int ind = (j*nov + k) / 4;
+	int mod = (j*nov + k) % 4;
+        float* fetch2 = (float*)&tex1Dfetch<float4>(tex4, ind);
+	printf("j: %d - k: %d -- fetched: %f -- float4mod: %f \n", j, k, fetch, fetch2[mod]);
+	//for(int i = 0; i < 4; i++){
+	//printf("float4[%d]: %f ", i, fetch2[i]);
+	//}
+	//printf("\n");
+      }
+    }
+    
+  }
+  __syncthreads();
+  
+
   
   for (int k = 0; k < (nov-1); k++) {
     if ((gray >> k) & 1LL) { 
@@ -352,35 +372,45 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
     }
   }
   
- 
-
-long long gray_diff;
-int k;
-
+  
+  
+  long long gray_diff;
+  int k;
+  
   int prodSign = 1;
   if(i & 1LL) {
     prodSign = -1;
   }
-
+  
+  int wave = 0;
+  
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
     k = __ffsll(gray_diff) - 1;
     gray ^= (one << k); 
     s = ((one << k) & gray) ? 1 : -1;
-      
+    
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      //if(tid < 64)
-      //printf("tid: %d | k: %d |i: %lld | x: %d | t: %d \n", tid, k, i, (block_dim*j) + thread_id, (j*nov) +k);
+      //if(tid < 32 && wave < 500){
+      //int ind = (j*nov) / 4;
+      //int mod = (j*nov) % 4;
+      //fetched = (float*)&tex1Dfetch<float4>(tex4, ind);
+      //float mat_val = tex1Dfetch<float>(mat_t, (j*nov)+0);
+      //printf("tid: %d -- fetched: %f - %f - %f - %f -- val: %f \n", tid, fetched[0], fetched[1], fetched[2], fetched[3], mat_val);
+      //wave++;
+      //}
+      
+      
       my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k); 
       prod *= my_x[block_dim*j + thread_id];  
     }
-
+    
     my_p += prodSign * prod; 
     prodSign *= -1;
     i++;
   }
-
+  
   p[tid] = my_p;
 }
 

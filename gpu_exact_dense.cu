@@ -819,7 +819,7 @@ void make4_help(float* mat, float4* host4, int nov, int f4size){
 
   float x, y, z, w;
   
-  for(int i = 0; i < f4size - 2; i+=4){
+  for(int i = 0; i < nov - 2; i+=4){
     x = mat[i];
     y = mat[i+1];
     z = mat[i+2];

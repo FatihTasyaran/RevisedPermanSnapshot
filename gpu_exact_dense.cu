@@ -3,19 +3,23 @@
 #include "flags.h"
 #include "gpu_wrappers.h"
 
-static int glob_nov;
-static int glob_sizeof_c;
-static int glob_sizeof_s;
-
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
    if (code != cudaSuccess) 
    {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
+     printf("Failed at line %d \n");
+     fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+     if (abort) exit(code);
+   }
+   else{
+     printf("Success at line %d \n", line);
    }
 }
+
+static int glob_nov;
+static int glob_sizeof_c;
+static int glob_sizeof_s;
 
 //This is a CPU helper kernel for hybrid setting
 template <class C, class S>
@@ -338,15 +342,17 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   int div;
   int mod;
   int ind;
+
   
-  for (int j = 0; j < nov; j++) {
-    fetched = (float*)&tex1Dfetch<float4>(tex4, j);
-    for (int k = 0; k < (nov-1); k++) {
-      if ((gray >> k) & 1LL) {
-	my_x[block_dim*j + thread_id] += fetched[k];
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { 
+      for (int j = 0; j < nov; j++) {
+	my_x[block_dim*j + thread_id] += tex1Dfetch<float>(mat_t, (j*nov)+k); 
       }
     }
   }
+  
+ 
 
 long long gray_diff;
 int k;
@@ -783,7 +789,7 @@ void make4_help(float* mat, float4* host4, int nov, int f4size){
 
   float x, y, z, w;
   
-  for(int i = 0; i < f4size - 1; i+=4){
+  for(int i = 0; i < f4size - 2; i+=4){
     x = mat[i];
     y = mat[i+1];
     z = mat[i+2];
@@ -802,7 +808,7 @@ void make4_help(float* mat, float4* host4, int nov, int f4size){
       arr[i] = 0;
   }
 
-  host4[f4size] = make_float4(arr[0], arr[1], arr[2], arr[3]);
+  host4[f4size - 1] = make_float4(arr[0], arr[1], arr[2], arr[3]);
 }
 
 template <class C, class S>
@@ -822,7 +828,14 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
 
   cudaSetDevice(device_id);
   cudaDeviceSynchronize();
-
+  
+  int f4size = ((nov*nov)/4) + 1;
+  size_t size4 = f4size * sizeof(float4);
+  //printf("size4: %zu \n", size4);
+  
+  float4* buffer4 = 0;
+  gpuErrchk ( cudaMalloc((void**)&buffer4, size4) );
+    
   
   C x[nov]; 
   C rs; //row sum
@@ -838,17 +851,20 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
     p *= x[j];   // product of the elements in vector 'x'
   }
 
+    
   //For variable smem
   glob_nov = nov;
   glob_sizeof_c = sizeof(C);
   glob_sizeof_s = sizeof(S);
   //For variable smem
 
+  gpuErrchk (
+  
   cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
                                                  &block_dim,
                                                  &kernel_xshared_coalescing<C,S>,
                                                  xshared_coalescing_sharedmem,
-                                                 0);
+                                                 0) );
 
   size_t size = nov*block_dim*sizeof(C);
   
@@ -860,7 +876,8 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
     grid_dim*=grid_dim_multip;
     printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
   }
-  
+
+    
   //create the transpose of the matrix
   float* f_mat = new float[nov * nov];
   for (int i = 0; i < nov; i++) {
@@ -870,23 +887,25 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
     }
   }
   
-  
+    
   //S *d_mat_t;
   C *d_x, *d_p;
   C *h_p = new C[grid_dim * block_dim];
 
-  cudaMalloc( &d_x, (nov) * sizeof(C));
-  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  
+  gpuErrchk ( cudaMalloc( &d_x, (nov) * sizeof(C)) );
+  gpuErrchk ( cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C)) );
+  
   //cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
 
-  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  gpuErrchk ( cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice) );
   //cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
-
-
+  
+  
   //Texture object
   float* buffer;
-  cudaMalloc(&buffer, nov*nov*sizeof(float));
-  cudaMemcpy(buffer, mat, nov*nov*sizeof(float), cudaMemcpyHostToDevice);
+  gpuErrchk ( cudaMalloc(&buffer, nov*nov*sizeof(float)) );
+  gpuErrchk ( cudaMemcpy(buffer, mat, nov*nov*sizeof(float), cudaMemcpyHostToDevice) );
   
   cudaResourceDesc resDesc;
   memset(&resDesc, 0 , sizeof(resDesc));
@@ -902,22 +921,27 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   //texDesc.normalizedCoords = 0;
     
   cudaTextureObject_t tex = 0;
-  cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL);
+  gpuErrchk ( cudaCreateTextureObject(&tex, &resDesc, &texDesc, NULL) );
 
   printf("==WARNING== TEX \n");
 
   //F4 TEXTURE
-  int f4size = ((nov*nov)/4) + 1;
+  //int f4size = ((nov*nov)/4) + 1;
   float4* host4 = new float4[f4size];
   make4_help(f_mat, host4, nov*nov, f4size);
-  size_t size4 = f4size * sizeof(float4);//float4* ?
-  printf("size4: %zu \n", size4);
-  float4* buffer4 = 0;
-  gpuErrchk ( cudaMalloc((void**)&buffer4, f4size) );
-  //cudaMemcpy(buffer4, host4, size4, cudaMemcpyHostToDevice);
+  //size_t size4 = f4size * sizeof(float4);//float4* ?
+  //printf("size4: %zu \n", size4);
+  //float4* buffer4 = 0;
+  //gpuErrchk ( cudaMalloc((void**)&buffer4, size4) );
+  gpuErrchk ( cudaMemcpy(buffer4, host4, size4, cudaMemcpyHostToDevice) );
+
+  
+  
 
   cudaResourceDesc resDesc4;
   memset(&resDesc4, 0, sizeof(resDesc4));
+  resDesc4.resType = cudaResourceTypeLinear;
+  resDesc4.res.linear.desc = cudaCreateChannelDesc<float4>();
   resDesc4.res.linear.devPtr = buffer4;
   resDesc4.res.linear.desc.f = cudaChannelFormatKindFloat;
   resDesc4.res.linear.desc.x = 32; // bits per channel
@@ -926,13 +950,14 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
   resDesc4.res.linear.desc.w = 32; // bits per channel
   resDesc4.res.linear.sizeInBytes = size4;
 
+  
   cudaTextureDesc texDesc4;
-  memset(&texDesc, 0, sizeof(texDesc4));
-  texDesc.readMode = cudaReadModeElementType;
+  memset(&texDesc4, 0, sizeof(texDesc4));
+  texDesc4.readMode = cudaReadModeElementType;
   //texDesc.normalizedCoords = 0;
   
   cudaTextureObject_t tex4 = 0;
-  cudaCreateTextureObject(&tex4, &resDesc4, &texDesc4, NULL);
+  gpuErrchk ( cudaCreateTextureObject(&tex4, &resDesc4, &texDesc4, NULL) );
   
   
   double starttime = omp_get_wtime();
@@ -958,7 +983,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
 
   delete [] f_mat;
   delete[] h_p;
-  delete[] host4;
+  //delete[] host4;
 
   double perman = (4*(nov&1)-2) * return_p;
   double duration = omp_get_wtime() - starttime;

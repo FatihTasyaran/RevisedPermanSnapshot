@@ -103,7 +103,7 @@ int xshared_sharedmem(int b){
 
 //Same with above but lets keep it just to prevent confusion
 int xshared_coalescing_sharedmem(int b){ 
-  return glob_nov*b*glob_sizeof_c;
+  return glob_nov*b*glob_sizeof_c + 8*sizeof(float);
 }
 
 int xshared_coalescing_mshared_sharedmem(int b){
@@ -318,9 +318,13 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   extern __shared__ double shared_mem[]; 
   C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
 
+  float* eights_zero = (float*) &my_x[nov * block_dim];
+  float* eights_one = (float*) &eights_zero[4];
+  
   for (int k = 0; k < nov; k++) {
     my_x[block_dim*k + thread_id] = x[k];
   }
+
 
   long long number_of_threads = blockDim.x * gridDim.x;
 
@@ -350,7 +354,6 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   }
   
   
-  
   long long gray_diff;
   int k;
   
@@ -358,9 +361,6 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
   if(i & 1LL) {
     prodSign = -1;
   }
-  
-  float4 cast_ptr;
-  float my_floats[4];
   
   while (i < my_end) {
     gray_diff = (i ^ (i >> 1)) ^ gray;
@@ -370,26 +370,25 @@ __global__ void kernel_xshared_coalescing(cudaTextureObject_t mat_t,
     
     prod = 1.0;
     for (int j = 0; j < nov; j++) {
-      if(lane_id == 0){
-	cast_ptr = tex1Dfetch<float4>(tex4, j*2);
-	my_floats[0] = cast_ptr.x;
-	my_floats[1] = cast_ptr.y;
-	my_floats[2] = cast_ptr.z;
-	my_floats[3] = cast_ptr.w;
+      if(thread_id == 0){
+	eights_zero = (float*)&tex1Dfetch<float4>(tex4, j*2);
+      }
+      if(thread_id == 1){
+	eights_one = (float*)&tex1Dfetch<float4>(tex4, (j*2)+1);
       }
       __syncwarp();
 
-      for(int r = 0; r < 4; r++){
-	my_floats[r] = __shfl_sync(0xFFFFFFFF, my_floats[r], 0);
-      }
-
+      
       if(k < 4)
-	my_x[block_dim*j + thread_id] += s * my_floats[k];
+	my_x[block_dim*j + thread_id] += s * eights_zero[k];
+      else if(k < 8)
+	my_x[block_dim*j + thread_id] += s * eights_one[k-4];
       else
 	my_x[block_dim*j + thread_id] += s * tex1Dfetch<float>(mat_t, (j*nov)+k);
       
       prod *= my_x[block_dim*j + thread_id];  
     }
+    __syncwarp();
     
     my_p += prodSign * prod; 
     prodSign *= -1;
@@ -874,7 +873,7 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
                                                  xshared_coalescing_sharedmem,
                                                  0) );
 
-  size_t size = nov*block_dim*sizeof(C);
+  size_t size = nov*block_dim*sizeof(C) + 8*sizeof(float);
   
   printf("==SC== Shared memory per block is set to : %zu \n", size);
   printf("==SC== Grid dim is set to : %d \n", grid_dim);

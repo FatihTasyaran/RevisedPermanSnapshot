@@ -7,6 +7,49 @@ static int glob_nov;
 static int glob_sizeof_c;
 static int glob_sizeof_s;
 
+#define LIST_OF_REGISTERS						\
+  X(value0, 0)								\
+    X(value1, 1)							\
+    X(value2, 2)							\
+    X(value3, 3)							\
+    X(value4, 4)							\
+    X(value5, 5)								\
+    X(value6, 6)								\
+    X(value7 ,7)								\
+    X(value8, 8)								\
+    X(value9, 9)								\
+    X(value10, 10)								\
+    X(value11, 11)								\
+    X(value12, 12)								\
+    X(value13, 13)								\
+    X(value14, 14)								\
+    X(value15, 15)								\
+    X(value16, 16)								\
+    X(value17, 17)								\
+    X(value18, 18)								\
+    X(value19, 19)								\
+    X(value20, 20)								\
+    X(value21, 21)								\
+    X(value22, 22)								\
+    X(value23, 23)								\
+    X(value24, 24)								\
+    X(value25, 25)								\
+    X(value26, 26)								\
+    X(value27, 27)								\
+    X(value28, 28)								\
+    X(value29, 29)								\
+    X(value30, 30)								\
+    X(value31, 31)								\
+    X(value32, 32)								\
+    X(value33, 33)								\
+    X(value34, 34)								\
+    X(value35, 35)								\
+    X(value36, 36)								\
+    X(value37, 37)								\
+    X(value38, 38)								\
+    X(value39, 39) 
+  
+
 //This is a CPU helper kernel for hybrid setting
 template <class C, class S>
 C cpu_perman64(S* mat_t,
@@ -90,6 +133,10 @@ int xshared_sharedmem(int b){
 //Same with above but lets keep it just to prevent confusion
 int xshared_coalescing_sharedmem(int b){ 
   return glob_nov*b*glob_sizeof_c;
+}
+
+int xregister_coalescing_mshared_sharedmem(int b){ 
+  return glob_nov*glob_nov*glob_sizeof_s;
 }
 
 int xshared_coalescing_mshared_sharedmem(int b){
@@ -359,8 +406,382 @@ __global__ void kernel_xshared_coalescing(S* mat_t, C* x, C* p, int nov) {
   p[tid] = my_p;
 }
 
+///////Vertical versions 1
 template <class C, class S>
-__global__ void kernel_xshared_coalescing_mshared(S* mat_t, C* x, C* p, int nov, long long start, long long end) {
+__global__ void kernel_xshared_coalescing_plainmatrix(S* mat_t, C* x, C* p, int nov) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+  
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if(i & 1LL) {
+    prodSign = -1;
+  }
+
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+
+///////Vertical versions 2
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_plainmatrix_texfour(S* mat_t, C* x, C* p, int nov) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+  
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if(i & 1LL) {
+    prodSign = -1;
+  }
+
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+///////Vertical versions 3
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_plainmatrix_texeight(S* mat_t, C* x, C* p, int nov) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+  
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if(i & 1LL) {
+    prodSign = -1;
+  }
+
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+
+//Vertical versions 4
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_plainmatrix_mshared(S* mat, C* x, C* p, int nov, long long start, long long end) {
+  
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+  S *shared_mat = (S*) &my_x[nov * block_dim]; // size = nov * nov
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  for(int k = 0; (k*block_dim) < (nov*nov); k++){
+    if(k*block_dim + thread_id < nov*nov){
+      shared_mat[k*block_dim+thread_id] = mat[k*block_dim+thread_id];
+      //if(tid < block_dim)
+      //printf("tid: %d -- thread_id: %d -- k: %d -- access: %d \n", tid, thread_id, k, k*block_dim+thread_id);
+    }
+  }
+
+  __syncthreads();
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += shared_mat[(j * nov) + k]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+
+  if(tid < 32){
+    for(int i = 0; i < nov; i++){
+      printf("tid: %d || x: %d || #value: %f \n", tid, i, (double)my_x[i]);
+    }
+  }
+    
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if (i & 1LL) {
+    prodSign = -1;
+  }
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * shared_mat[(j * nov) + k]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+//Vertical versions 5
+template <class C, class S>
+__global__ void kernel_xregister_coalescing_plainmatrix_mshared(S* mat, C* x, C* p, int nov, long long start, long long end) {
+
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  S *shared_mat = (S*) &shared_mem; // size = nov * nov
+  
+#define X(value, a) C value;
+  LIST_OF_REGISTERS
+#undef X
+    
+#define X(value, a) if(a < nov){value=x[a];}
+    LIST_OF_REGISTERS
+#undef X
+
+    for(int k = 0; (k*block_dim) < (nov*nov); k++){
+      if(k*block_dim + thread_id < nov*nov){
+	shared_mat[k*block_dim+thread_id] = mat[k*block_dim+thread_id];
+      }
+    }
+  
+  __syncthreads();
+  
+  long long number_of_threads = blockDim.x * gridDim.x;
+  
+  long long one = 1;
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+#define X(value, a) if(a < nov){value += shared_mat[(a * nov) + k];}
+      LIST_OF_REGISTERS
+#undef X
+	}
+  }
+
+  if(tid < 32){
+#define X(value, a) if(a < nov){printf("tid: %d || reg: %d ||  #value: %f \n", tid, a, (double)value);}
+    LIST_OF_REGISTERS
+#undef X
+      }
+  
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if (i & 1LL) {
+    prodSign = -1;
+  }
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+    
+    prod = 1.0;
+#define X(value, a) if(a < nov){value+=s*shared_mat[(a*nov)+k];prod*=value;}
+    LIST_OF_REGISTERS
+#undef X
+      
+      my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+  
+
+//Vertical versions 6
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_plainmatrix_mshared_selected(S* mat_t, C* x, C* p, int nov, long long start, long long end) {
   int tid = threadIdx.x + (blockIdx.x * blockDim.x);
   int thread_id = threadIdx.x;
   int block_dim = blockDim.x;
@@ -376,6 +797,231 @@ __global__ void kernel_xshared_coalescing_mshared(S* mat_t, C* x, C* p, int nov,
   for (int k = 0; k < ((nov*nov)/block_dim + 1); k++) {
     if ((block_dim * k + thread_id) < (nov * nov))
     shared_mat_t[block_dim * k + thread_id] = mat_t[block_dim * k + thread_id];
+  }
+
+  __syncthreads();
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+    
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if (i & 1LL) {
+    prodSign = -1;
+  }
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+//Vertical versions 7
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_plainmatrix_mshared_selected_perwarp(S* mat_t, C* x, C* p, int nov, long long start, long long end) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+  S *shared_mat_t = (S*) &my_x[nov * block_dim]; // size = nov * nov
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  for (int k = 0; k < ((nov*nov)/block_dim + 1); k++) {
+    if ((block_dim * k + thread_id) < (nov * nov))
+    shared_mat_t[block_dim * k + thread_id] = mat_t[block_dim * k + thread_id];
+  }
+
+  __syncthreads();
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+    
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if (i & 1LL) {
+    prodSign = -1;
+  }
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+
+//Vertical versions 8
+template <class C, class S>
+__global__ void kernel_xregister_coalescing_plainmatrix_mshared_selected_perwarp(S* mat_t, C* x, C* p, int nov, long long start, long long end) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+  S *shared_mat_t = (S*) &my_x[nov * block_dim]; // size = nov * nov
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  for (int k = 0; k < ((nov*nov)/block_dim + 1); k++) {
+    if ((block_dim * k + thread_id) < (nov * nov))
+    shared_mat_t[block_dim * k + thread_id] = mat_t[block_dim * k + thread_id];
+  }
+
+  __syncthreads();
+
+  long long number_of_threads = blockDim.x * gridDim.x;
+
+  long long one = 1;
+  
+  long long chunk_size = (end - start) / number_of_threads + 1;
+
+  long long my_start = start + tid * chunk_size;
+  long long my_end = min(start + ((tid+1) * chunk_size), end);
+  
+  C s;  //+1 or -1 
+  C prod; //product of the elements in vector 'x'
+  C my_p = 0;
+  long long i = my_start;
+  long long gray = (i-1) ^ ((i-1) >> 1);
+
+  for (int k = 0; k < (nov-1); k++) {
+    if ((gray >> k) & 1LL) { // whether kth column should be added to x vector or not
+      for (int j = 0; j < nov; j++) {
+        my_x[block_dim*j + thread_id] += shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      }
+    }
+  }
+    
+  long long gray_diff;
+  int k;
+
+  int prodSign = 1;
+  if (i & 1LL) {
+    prodSign = -1;
+  }
+  while (i < my_end) {
+    gray_diff = (i ^ (i >> 1)) ^ gray;
+    k = __ffsll(gray_diff) - 1;
+    gray ^= (one << k); // Gray-code order: 1,3,2,6,7,5,4,12,13,15,...
+    //decide if subtract of not - if the kth bit of gray is one then 1, otherwise -1
+    s = ((one << k) & gray) ? 1 : -1;
+      
+    prod = 1.0;
+    for (int j = 0; j < nov; j++) {
+      my_x[block_dim*j + thread_id] += s * shared_mat_t[(k * nov) + j]; // see Nijenhuis and Wilf - update x vector entries
+      prod *= my_x[block_dim*j + thread_id];  //product of the elements in vector 'x'
+    }
+
+    my_p += prodSign * prod; 
+    prodSign *= -1;
+    i++;
+  }
+
+  p[tid] = my_p;
+}
+
+
+
+template <class C, class S>
+__global__ void kernel_xshared_coalescing_mshared(S* mat_t, C* x, C* p, int nov, long long start, long long end) {
+  int tid = threadIdx.x + (blockIdx.x * blockDim.x);
+  int thread_id = threadIdx.x;
+  int block_dim = blockDim.x;
+
+  extern __shared__ double shared_mem[]; 
+  C *my_x = (C*)shared_mem; // size = nov * BLOCK_SIZE
+  S *shared_mat_t = (S*) &my_x[nov * block_dim]; // size = nov * nov
+
+  for (int k = 0; k < nov; k++) {
+    my_x[block_dim*k + thread_id] = x[k];
+  }
+
+  
+  for(int k = 0; (k*block_dim) < (nov*nov); k++){
+    if(k*block_dim + thread_id < nov*nov){
+      shared_mat_t[k*block_dim+thread_id] = mat_t[k*block_dim+thread_id];
+      //if(tid < block_dim)
+      //printf("tid: %d -- thread_id: %d -- k: %d -- access: %d \n", tid, thread_id, k, k*block_dim+thread_id);
+    }
   }
 
   __syncthreads();
@@ -850,6 +1496,893 @@ extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags fl
 
   //return((4*(nov&1)-2) * p);
 }
+
+
+/////// Vertical versions 1
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags//
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+  
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing<C,S>,
+                                                 xshared_coalescing_sharedmem,
+                                                 0);
+
+  size_t size = nov*block_dim*sizeof(C);
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+  
+  //create the transpose of the matrix
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  //double stt = omp_get_wtime();
+  kernel_xshared_coalescing_plainmatrix<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov);
+  cudaDeviceSynchronize();
+  //double enn = omp_get_wtime();
+  //printf("Kernel in %f \n", enn - stt);
+  //cout << "kernel" << " in " << (enn - stt) << endl;
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+  }
+
+  delete [] mat_t;
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+
+
+  //return((4*(nov&1)-2) * p);
+}
+
+
+/////// Vertical versions 2
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags//
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+  
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing<C,S>,
+                                                 xshared_coalescing_sharedmem,
+                                                 0);
+
+  size_t size = nov*block_dim*sizeof(C);
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+  
+  //create the transpose of the matrix
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  //double stt = omp_get_wtime();
+  kernel_xshared_coalescing_plainmatrix_texfour<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov);
+  cudaDeviceSynchronize();
+  //double enn = omp_get_wtime();
+  //printf("Kernel in %f \n", enn - stt);
+  //cout << "kernel" << " in " << (enn - stt) << endl;
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+  }
+
+  delete [] mat_t;
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+
+
+  //return((4*(nov&1)-2) * p);
+}
+
+
+/////// Vertical versions 3
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags//
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+  
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing<C,S>,
+                                                 xshared_coalescing_sharedmem,
+                                                 0);
+
+  size_t size = nov*block_dim*sizeof(C);
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+  
+  //create the transpose of the matrix
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  //double stt = omp_get_wtime();
+  kernel_xshared_coalescing_plainmatrix_texeight<C,S><<<grid_dim , block_dim , size>>> (d_mat_t, d_x, d_p, nov);
+  cudaDeviceSynchronize();
+  //double enn = omp_get_wtime();
+  //printf("Kernel in %f \n", enn - stt);
+  //cout << "kernel" << " in " << (enn - stt) << endl;
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+  }
+
+  delete [] mat_t;
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+
+
+  //return((4*(nov&1)-2) * p);
+}
+
+
+/////// Vertical versions 4
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared(DenseMatrix<S>* densemat, flags flags) {
+
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+      //printf("j: %d -- k: %d \n", j, k);
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+  
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing_mshared<C,S>,
+                                                 xshared_coalescing_mshared_sharedmem,
+                                                 0);
+
+  size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+
+  S *d_mat;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+
+  
+  kernel_xshared_coalescing_plainmatrix_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat, d_x, d_p, nov, start, end);
+  cudaDeviceSynchronize();
+  
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat);
+  cudaFree(d_x);
+  cudaFree(d_p);
+  
+  //for(int i = 0; i < grid_dim * block_dim; i++){
+  //printf("h_p[%d]: %e \n", i, h_p[i]);
+  //}
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+    //printf("i: %d -- p: %e  \n", i, p);
+  }
+  
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+  
+}
+
+/////// Vertical versions 5
+template <class C, class S>
+extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared(DenseMatrix<S>* densemat, flags flags) {
+
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+      //printf("j: %d -- k: %d \n", j, k);
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xregister_coalescing_plainmatrix_mshared<C,S>,
+                                                 xregister_coalescing_mshared_sharedmem,
+                                                 0);
+
+  size_t size = nov*nov*sizeof(S);
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+
+  S *d_mat;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+
+  
+  kernel_xregister_coalescing_plainmatrix_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat, d_x, d_p, nov, start, end);
+  cudaDeviceSynchronize();
+  
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat);
+  cudaFree(d_x);
+  cudaFree(d_p);
+  
+  //for(int i = 0; i < grid_dim * block_dim; i++){
+  //printf("h_p[%d]: %e \n", i, h_p[i]);
+  //}
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+    //printf("i: %d -- p: %e  \n", i, p);
+  }
+
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+  
+}
+
+
+/////// Vertical versions 6
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+      //printf("j: %d -- k: %d \n", j, k);
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+  
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing_mshared<C,S>,
+                                                 xshared_coalescing_mshared_sharedmem,
+                                                 0);
+
+  size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      //printf("transpose i: %d -- j: %d \n", i, j);
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+
+  
+  kernel_xshared_coalescing_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat_t, d_x, d_p, nov, start, end);
+  cudaDeviceSynchronize();
+  
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+  
+  //for(int i = 0; i < grid_dim * block_dim; i++){
+  //printf("h_p[%d]: %e \n", i, h_p[i]);
+  //}
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+    //printf("i: %d -- p: %e  \n", i, p);
+  }
+
+  //delete [] mat_t;
+  free(mat_t);
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+  
+}
+
+
+/////// Vertical versions 7
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+      //printf("j: %d -- k: %d \n", j, k);
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+  
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing_mshared<C,S>,
+                                                 xshared_coalescing_mshared_sharedmem,
+                                                 0);
+
+  size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      //printf("transpose i: %d -- j: %d \n", i, j);
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+
+  
+  kernel_xshared_coalescing_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat_t, d_x, d_p, nov, start, end);
+  cudaDeviceSynchronize();
+  
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+  
+  //for(int i = 0; i < grid_dim * block_dim; i++){
+  //printf("h_p[%d]: %e \n", i, h_p[i]);
+  //}
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+    //printf("i: %d -- p: %e  \n", i, p);
+  }
+
+  //delete [] mat_t;
+  free(mat_t);
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+  
+}
+
+
+/////// Vertical versions 8
+template <class C, class S>
+  extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp(DenseMatrix<S>* densemat, flags flags) {
+  
+  //Pack parameters//
+  S* mat = densemat->mat;
+  int nov = densemat->nov;
+  //Pack parameters//
+
+  //Pack flags//
+  int grid_dim = flags.grid_dim;
+  int block_dim = flags.block_dim;
+  int device_id = flags.device_id;
+  int grid_dim_multip = flags.grid_multip;
+  //Pack flags
+
+  cudaSetDevice(device_id);
+  cudaDeviceSynchronize();
+
+  double starttime = omp_get_wtime();
+  
+  C x[nov]; 
+  C rs; //row sum
+  C p = 1; //product of the elements in vector 'x'
+
+  //create the x vector and initiate the permanent
+  for (int j = 0; j < nov; j++) {
+    rs = .0f;
+    for (int k = 0; k < nov; k++) {
+      rs += mat[(j * nov) + k];  // sum of row j
+      //printf("j: %d -- k: %d \n", j, k);
+    }
+    x[j] = mat[(j * nov) + (nov-1)] - rs/2;  // see Nijenhuis and Wilf - x vector entry
+    p *= x[j];   // product of the elements in vector 'x'
+  }
+
+  //For variable smem
+  glob_nov = nov;
+  glob_sizeof_c = sizeof(C);
+  glob_sizeof_s = sizeof(S);
+  //For variable smem
+  
+  cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
+                                                 &block_dim,
+                                                 &kernel_xshared_coalescing_mshared<C,S>,
+                                                 xshared_coalescing_mshared_sharedmem,
+                                                 0);
+
+  size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+  
+  printf("==SC== Shared memory per block is set to : %zu \n", size);
+  printf("==SC== Grid dim is set to : %d \n", grid_dim);
+  printf("==SC== Block dim is set to : %d \n", block_dim);
+  
+  if(grid_dim_multip != 1){
+    grid_dim*=grid_dim_multip;
+    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+  }
+
+  S* mat_t = new S[nov * nov];
+  for (int i = 0; i < nov; i++) {
+    for (int j = 0; j < nov; j++) {
+      //printf("transpose i: %d -- j: %d \n", i, j);
+      mat_t[(i * nov) + j] = mat[(j * nov) + i];
+    }
+  }
+
+  S *d_mat_t;
+  C *d_x, *d_p;
+  C *h_p = new C[grid_dim * block_dim];
+
+  cudaMalloc( &d_x, (nov) * sizeof(C));
+  cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
+  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+
+  long long start = 1;
+  long long end = (1LL << (nov-1));
+
+  
+  kernel_xshared_coalescing_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat_t, d_x, d_p, nov, start, end);
+  cudaDeviceSynchronize();
+  
+  
+  cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_mat_t);
+  cudaFree(d_x);
+  cudaFree(d_p);
+  
+  //for(int i = 0; i < grid_dim * block_dim; i++){
+  //printf("h_p[%d]: %e \n", i, h_p[i]);
+  //}
+
+  double return_p = p;
+  
+  for (int i = 0; i < grid_dim * block_dim; i++) {
+    return_p += (double)h_p[i];
+    //printf("i: %d -- p: %e  \n", i, p);
+  }
+
+  //delete [] mat_t;
+  free(mat_t);
+  delete[] h_p;
+
+  double perman = (4*(nov&1)-2) * return_p;
+  double duration = omp_get_wtime() - starttime;
+  Result result(perman, duration);
+  return result;
+
+}
+////////
+
+
 
 template <class C, class S>
   extern Result gpu_perman64_xshared_coalescing_mshared(DenseMatrix<S>* densemat, flags flags) {
@@ -1447,6 +2980,78 @@ template extern Result gpu_perman64_xshared_coalescing<float, float>(DenseMatrix
 template extern Result gpu_perman64_xshared_coalescing<double, float>(DenseMatrix<float>* densemat, flags flags);
 template extern Result gpu_perman64_xshared_coalescing<float, double>(DenseMatrix<double>* densemat, flags flags);
 template extern Result gpu_perman64_xshared_coalescing<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 1
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 2
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 3
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 4
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 5
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 6
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 7
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<double, double>(DenseMatrix<double>* densemat, flags flags);
+/////
+
+//////Vertical versions 8
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<double, double>(DenseMatrix<double>* densemat, flags flags);
 /////
 
 /////

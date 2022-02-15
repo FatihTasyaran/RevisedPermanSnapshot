@@ -105,8 +105,8 @@ template <class S>
 Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flags, bool supress) 
 {
 
-  int grid_dim = 2048; //For any case, if it's failed to determined by CUDA
-  int block_dim = 256;
+  //int grid_dim = 2048; //For any case, if it's failed to determined by CUDA
+  //int block_dim = 256;
   
   //Pack flags
   bool cpu = flags.cpu;
@@ -334,6 +334,9 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	result = gpu_perman64_xshared<double, S>(densemat, flags);
       
     }
+
+    ////////
+    
     else if (perman_algo == 3) {
 #ifdef DEBUG
       printf("Calling, gpu_perman64_xshared_coalescing() \n");
@@ -348,6 +351,128 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       else
 	result = gpu_perman64_xshared_coalescing<double, S>(densemat, flags);
     }
+
+    else if (perman_algo == 31) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_plainmatrix";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 32) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texfour() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_plainmatrix_texfour";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix_texfour<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix_texfour<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 33) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texeight() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_plainmatrix_texeight";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix_texeight<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix_texeight<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 34) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_plainmatrix_mshared";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 35) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xregister_coalescing_plainmatrix_mshared";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared<double, S>(densemat, flags);
+    }
+    
+    else if (perman_algo == 36) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_mshared_selected() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_mshared_selected";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 37) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xshared_coalescing_plainmatrix_mshared_selected_perwarp";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp<double, S>(densemat, flags);
+    }
+
+    else if (perman_algo == 38) {
+#ifdef DEBUG
+      printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp() \n");
+#endif
+#ifdef STRUCTURAL
+      exit(1);
+#endif
+      flags.algo_name = "gpu_perman_xregister_coalescing_plainmatrix_mshared_selected_perwarp";
+      
+      if(flags.calculation_half_precision)
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<float, S>(densemat, flags);
+      else
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp<double, S>(densemat, flags);
+    }
+    /////
+    
     else if (perman_algo == 4) {
 #ifdef DEBUG
       printf("Calling, gpu_perman64_xshared_coalescing_mshared() \n");

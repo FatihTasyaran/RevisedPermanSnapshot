@@ -1,7 +1,3 @@
-// This function is exists in gpu_exact_dense.cu, but only called within file therefore no need to have a signature. 
-//template <class T>
-//extern double cpu_perman64(T *mat_t, double x[], int nov, long long start, long long end, int threads); //This is a CPU helper for hybrid setting
-
 #ifndef GPU_WRAPPERS_H
 #define GPU_WRAPPERS_H
 
@@ -19,6 +15,38 @@ extern Result gpu_perman64_xshared(DenseMatrix<S>* densemat, flags flags);
 
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 1
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 2
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_texfour(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 3
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_texeight(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 4
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 5
+template <class C, class S>
+extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 6
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 7
+template <class C, class S>
+extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp(DenseMatrix<S>* densemat, flags flags);
+
+//Vertical versions 8
+template <class C, class S>
+extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp(DenseMatrix<S>* densemat, flags flags);
 
 template <class C, class S>
 extern Result gpu_perman64_xshared_coalescing_mshared(DenseMatrix<S>* densemat, flags flags);

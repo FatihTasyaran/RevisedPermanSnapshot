@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "flags.h"
 #include "gpu_wrappers.h"
+#include <mpi.h>
 
 static int glob_nov;
 static int glob_sizeof_c;
@@ -745,11 +746,11 @@ __global__ void kernel_xregister_coalescing_plainmatrix_mshared(S* mat, C* x, C*
 	}
   }
 
-  if(tid < 32){
-#define X(value, a) if(a < nov){printf("tid: %d || reg: %d ||  #value: %f \n", tid, a, (double)value);}
-    LIST_OF_REGISTERS
-#undef X
-      }
+  //if(tid < 32){
+  //#define X(value, a) if(a < nov){printf("tid: %d || reg: %d ||  #value: %f \n", tid, a, (double)value);}
+  //LIST_OF_REGISTERS
+  //#undef X
+  //}
   
   long long gray_diff;
   int k;
@@ -2039,13 +2040,13 @@ extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared(DenseMatrix<
 
 /////// Vertical versions 6
 template <class C, class S>
-extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(DenseMatrix<S>* densemat, flags flags) {
+  extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi(DenseMatrix<S>* densemat, flags flags) {
   
   //Pack parameters//
   S* mat = densemat->mat;
   int nov = densemat->nov;
   //Pack parameters//
-
+  
   //Pack flags//
   int grid_dim = flags.grid_dim;
   int block_dim = flags.block_dim;
@@ -2053,7 +2054,7 @@ extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(Dense
   int grid_dim_multip = flags.grid_multip;
   //Pack flags
 
-  cudaSetDevice(device_id);
+  //cudaSetDevice(device_id);
   cudaDeviceSynchronize();
 
   double starttime = omp_get_wtime();
@@ -2078,14 +2079,14 @@ extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(Dense
   glob_sizeof_c = sizeof(C);
   glob_sizeof_s = sizeof(S);
   //For variable smem
-  
+
   cudaOccupancyMaxPotentialBlockSizeVariableSMem(&grid_dim,
                                                  &block_dim,
-                                                 &kernel_xshared_coalescing_mshared<C,S>,
-                                                 xshared_coalescing_mshared_sharedmem,
+                                                 &kernel_xregister_coalescing_plainmatrix_mshared<C,S>,
+                                                 xregister_coalescing_mshared_sharedmem,
                                                  0);
 
-  size_t size = (nov*block_dim*sizeof(C) + nov*nov*sizeof(S));
+  size_t size = nov*nov*sizeof(S);
   
   printf("==SC== Shared memory per block is set to : %zu \n", size);
   printf("==SC== Grid dim is set to : %d \n", grid_dim);
@@ -2096,36 +2097,49 @@ extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(Dense
     printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
   }
 
-  S* mat_t = new S[nov * nov];
-  for (int i = 0; i < nov; i++) {
-    for (int j = 0; j < nov; j++) {
-      //printf("transpose i: %d -- j: %d \n", i, j);
-      mat_t[(i * nov) + j] = mat[(j * nov) + i];
-    }
-  }
-
-  S *d_mat_t;
+  S *d_mat;
   C *d_x, *d_p;
   C *h_p = new C[grid_dim * block_dim];
 
   cudaMalloc( &d_x, (nov) * sizeof(C));
   cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
-  cudaMalloc( &d_mat_t, (nov * nov) * sizeof(S));
+  cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
 
   cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
-  cudaMemcpy( d_mat_t, mat_t, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
 
   long long start = 1;
   long long end = (1LL << (nov-1));
 
+  long long my_start;
+  long long my_end;
+
+
+  //X vector needs to have different initial x vectors
+
+  int rank, nprocs;
+  MPI_Init(NULL, NULL);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+  long long offset = (end - start) / nprocs;
+
+  my_start = start + rank*offset;
+
+  if(rank == nprocs-1)
+    my_end = end;
+  else
+    my_end = start + (rank+1)*offset;
+
+  printf("My rank: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld\n", rank, nprocs, my_start, my_end, start, end);
   
-  kernel_xshared_coalescing_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat_t, d_x, d_p, nov, start, end);
+  kernel_xregister_coalescing_plainmatrix_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat, d_x, d_p, nov, my_start, my_end);
   cudaDeviceSynchronize();
   
   
   cudaMemcpy( h_p, d_p, grid_dim * block_dim * sizeof(C), cudaMemcpyDeviceToHost);
 
-  cudaFree(d_mat_t);
+  cudaFree(d_mat);
   cudaFree(d_x);
   cudaFree(d_p);
   
@@ -2140,11 +2154,21 @@ extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(Dense
     //printf("i: %d -- p: %e  \n", i, p);
   }
 
-  //delete [] mat_t;
-  free(mat_t);
   delete[] h_p;
-
+  
+  double reduce_p = 0;
+  MPI_Reduce(&return_p, &reduce_p, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  
+  double reduce_perman = (4*(nov&1)-2) * reduce_p;
+  printf("My rank: %d / %d || Partial sum: %.16e \n", rank, nprocs, return_p);
+  if(rank == 0)
+    printf("MPI Result || %.16e -> %.16e \n", reduce_p, reduce_perman);
+  
+  
   double perman = (4*(nov&1)-2) * return_p;
+
+  MPI_Finalize();
+
   double duration = omp_get_wtime() - starttime;
   Result result(perman, duration);
   return result;
@@ -3028,12 +3052,12 @@ template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared<dou
 /////
 
 //////Vertical versions 6
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, int>(DenseMatrix<int>* densemat, flags flags);
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, int>(DenseMatrix<int>* densemat, flags flags);
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, float>(DenseMatrix<float>* densemat, flags flags);
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, float>(DenseMatrix<float>* densemat, flags flags);
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, double>(DenseMatrix<double>* densemat, flags flags);
-template extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<float, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<double, int>(DenseMatrix<int>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<float, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<double, float>(DenseMatrix<float>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<float, double>(DenseMatrix<double>* densemat, flags flags);
+template extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<double, double>(DenseMatrix<double>* densemat, flags flags);
 /////
 
 //////Vertical versions 7

@@ -38,7 +38,7 @@ extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared(DenseMatrix<
 
 //Vertical versions 6
 template <class C, class S>
-extern Result gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected(DenseMatrix<S>* densemat, flags flags);
+extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi(DenseMatrix<S>* densemat, flags flags);
 
 //Vertical versions 7
 template <class C, class S>

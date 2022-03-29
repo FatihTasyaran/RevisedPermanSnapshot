@@ -434,12 +434,12 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 #ifdef STRUCTURAL
       exit(1);
 #endif
-      flags.algo_name = "gpu_perman_xshared_coalescing_mshared_selected";
+      flags.algo_name = "gpu_perman_register_coalescing_mshared_mpi";
       
       if(flags.calculation_half_precision)
-	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<float, S>(densemat, flags);
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<float, S>(densemat, flags);
       else
-	result = gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected<double, S>(densemat, flags);
+	result = gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi<double, S>(densemat, flags);
     }
 
     else if (perman_algo == 37) {

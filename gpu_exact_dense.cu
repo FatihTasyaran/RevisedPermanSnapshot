@@ -2042,6 +2042,8 @@ extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared(DenseMatrix<
 template <class C, class S>
   extern Result gpu_perman64_xregister_coalescing_plainmatrix_mshared_mpi(DenseMatrix<S>* densemat, flags flags) {
   
+
+#ifdef MPIENABLED
   //Pack parameters//
   S* mat = densemat->mat;
   int nov = densemat->nov;
@@ -2172,7 +2174,12 @@ template <class C, class S>
   double duration = omp_get_wtime() - starttime;
   Result result(perman, duration);
   return result;
-  
+
+#else
+  printf("SUPerman did not compiled for MPI! \n Compile as: 'make mpi' \n");
+  Result result(-1.0, -1.0);
+  return result;
+#endif
 }
 
 

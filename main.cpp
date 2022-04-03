@@ -930,17 +930,10 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
   }
 #endif
-  //return perman;
   return result;
 }
 
 
-//RunAlgo2()
-
-//template <class T>
-//void RunAlgo(DenseMatrix<T>* densemat, SparseMatrix<T>* sparsemat, flags flags) 
-
-//void RunPermanForGridGraphs(int m, int n, int perman_algo, bool gpu, bool cpu, int gpu_num, int threads, int number_of_times, int scale_intervals, int scale_times) {
 void RunPermanForGridGraphs(flags flags) {
   
   print_flags(flags);
@@ -2101,7 +2094,5 @@ int main (int argc, char **argv)
     exit(1);
   }
   
-  //std::feclearexcept(FE_OVERFLOW);
-  //std::cout << "Is any overflow happened: " << (bool)std::fetestexcept(FE_OVERFLOW) << std::endl;
   return 0;
 }

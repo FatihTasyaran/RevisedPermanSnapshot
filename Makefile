@@ -1,4 +1,18 @@
 main:
+	nvcc -c gpu_exact_dense.cu -Xcompiler -fopenmp
+	echo "GPU Dense Exact object.. OK"
+	nvcc -c gpu_exact_sparse.cu -Xcompiler -fopenmp
+	echo "Gpu Sparse Exact object.. OK"
+	nvcc -c gpu_approximation_dense.cu -Xcompiler -fopenmp
+	echo "Gpu Dense Approximation object.. OK"
+	nvcc -c gpu_approximation_sparse.cu -Xcompiler -fopenmp
+	echo "Gpu Sparse Approximation object.. OK"
+	g++ -c main.cpp mmio.c -fopenmp -O3 -std=c++11 -lcudart
+	echo "Main cpp object.. OK"
+	nvcc -o gpu_perman main.o gpu_exact_dense.o gpu_exact_sparse.o gpu_approximation_dense.o gpu_approximation_sparse.o -Xcompiler -fopenmp -O3
+	rm *.o
+
+mpi:
 	nvcc -c gpu_exact_dense.cu -Xcompiler -fopenmp -I/truba/sw/centos7.3/lib/openmpi/4.0.1-gcc-7.0.1/include
 	echo "GPU Dense Exact object.. OK"
 	nvcc -c gpu_exact_sparse.cu -Xcompiler -fopenmp
@@ -9,7 +23,7 @@ main:
 	echo "Gpu Sparse Approximation object.. OK"
 	g++ -c main.cpp mmio.c -fopenmp -O3 -std=c++11 -lcudart
 	echo "Main cpp object.. OK"
-	nvcc -o gpu_perman main.o gpu_exact_dense.o gpu_exact_sparse.o gpu_approximation_dense.o gpu_approximation_sparse.o -Xcompiler -fopenmp -O3 -L/truba/sw/centos7.3/lib/openmpi/4.0.1-gcc-7.0.1/lib -lmpi
+	nvcc -o mpi_perman main.o gpu_exact_dense.o gpu_exact_sparse.o gpu_approximation_dense.o gpu_approximation_sparse.o -Xcompiler -fopenmp -O3 -L/truba/sw/centos7.3/lib/openmpi/4.0.1-gcc-7.0.1/lib -lmpi -DMPIENABLED
 	rm *.o
 
 debug:

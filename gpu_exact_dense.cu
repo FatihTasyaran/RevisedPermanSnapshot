@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include "flags.h"
 #include "gpu_wrappers.h"
-#include <mpi.h>
+//#ifdef MPIENABLED
+//#include <mpi.h>
+//#endif
 
 static int glob_nov;
 static int glob_sizeof_c;

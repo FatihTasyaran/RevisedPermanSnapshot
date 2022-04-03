@@ -4,6 +4,13 @@
 #include<string>
 #include<iostream>
 
+#ifdef MPIENABLED
+#ifndef MPIINCLUDED
+#include<mpi.h>
+#define MPIINCLUDED
+#endif
+#endif
+
 template<class C>
 struct ScaleCompanion{
 

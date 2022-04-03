@@ -39,6 +39,10 @@
 //#define STRUCTURAL
 //#define HEAVYDEBUG
 
+//#ifdef MPIENABLED
+//#include <mpi.h>
+//#endif
+
 using namespace std;
 
 int recursive_count = 0;
@@ -1450,6 +1454,14 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 
 int main (int argc, char **argv)
 {
+
+  //int rank;
+  //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  //if(rank == 0) {
+  //printf ("Hello world! I'm rank %d\n", rank);
+  //}
+  //else{printf("I'm rank %d \n", rank);}
+  
   std::cout << "**command: ";
   for(int i = 0 ; i < argc; i++){
     std::cout << argv[i] << " ";

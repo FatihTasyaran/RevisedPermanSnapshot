@@ -2121,21 +2121,21 @@ template <class C, class S>
 
   //X vector needs to have different initial x vectors
 
-  int rank, nprocs;
-  MPI_Init(NULL, NULL);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+  //int rank, nprocs;
+  //MPI_Init(NULL, NULL);
+  //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  //MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
-  long long offset = (end - start) / nprocs;
+  long long offset = (end - start) / NPROCS;
 
-  my_start = start + rank*offset;
+  my_start = start + RANK*offset;
 
-  if(rank == nprocs-1)
+  if(RANK == NPROCS-1)
     my_end = end;
   else
-    my_end = start + (rank+1)*offset;
+    my_end = start + (RANK+1)*offset;
 
-  printf("My rank: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld\n", rank, nprocs, my_start, my_end, start, end);
+  printf("My RANK: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld\n", RANK, NPROCS, my_start, my_end, start, end);
   
   kernel_xregister_coalescing_plainmatrix_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat, d_x, d_p, nov, my_start, my_end);
   cudaDeviceSynchronize();
@@ -2164,8 +2164,8 @@ template <class C, class S>
   MPI_Reduce(&return_p, &reduce_p, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   
   double reduce_perman = (4*(nov&1)-2) * reduce_p;
-  printf("My rank: %d / %d || Partial sum: %.16e \n", rank, nprocs, return_p);
-  if(rank == 0)
+  printf("My RANK: %d / %d || Partial sum: %.16e \n", RANK, NPROCS, return_p);
+  if(RANK == 0)
     printf("MPI Result || %.16e -> %.16e \n", reduce_p, reduce_perman);
   
   

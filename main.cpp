@@ -14,11 +14,6 @@
 #include "flags.h"
 #endif
 
-//Functions from following files are called from this file
-//#include "gpu_exact_sparse.cu"
-//#include "gpu_approximation_dense.cu"
-//#include "gpu_approximation_sparse.cu"
-//Excluding GPU algos for a minimal start
 //
 #include "cpu_algos.hpp"
 //
@@ -39,13 +34,12 @@
 //#define STRUCTURAL
 //#define HEAVYDEBUG
 
-//#ifdef MPIENABLED
-//#include <mpi.h>
-//#endif
 
 using namespace std;
 
 int recursive_count = 0;
+int RANK;
+int NPROCS;
 
 template<class S>
 bool max20(DenseMatrix<S>* densemat){
@@ -68,39 +62,39 @@ void print_flags(flags flags){
   char hostname[HOST_NAME_MAX];
   gethostname(hostname, HOST_NAME_MAX);
   //
-  std::cout << "*~~~~~~~~~~~~FLAGS~~~~~~~~~~~~*" << std::endl;
-  std::cout << "- cpu: " << flags.cpu << std::endl;
-  std::cout << "- gpu: " << flags.gpu << std::endl;
-  std::cout << "- sparse: " << flags.sparse << std::endl;
-  std::cout << "- dense: " << flags.dense << std::endl;
-  std::cout << "- exact: " << flags.exact << std::endl;
-  std::cout << "- approximation: " << flags.approximation << std::endl;
-  std::cout << "- calculation half-precision: " << flags.calculation_half_precision << std::endl;
-  std::cout << "- calculation quad-precision: " << flags.calculation_quad_precision << std::endl;
-  std::cout << "- storage half-precision: " << flags.storage_half_precision << std::endl;
-  std::cout << "- storage quad-precision: " << flags.storage_quad_precision << std::endl;
-  std::cout << "- binary graph: " << flags.binary_graph << std::endl;
-  std::cout << "- grid_graph: " << flags.grid_graph << std::endl;
-  std::cout << "- gridm: " << flags.gridm << std::endl;
-  std::cout << "- gridn: " << flags.gridn << std::endl;
-  std::cout << "- perman_algo: " << flags.perman_algo << std::endl;
-  std::cout << "- threads: " << flags.threads << std::endl;
-  std::cout << "- scale_intervals: " << flags.scale_intervals << std::endl;
-  std::cout << "- scale_times: " << flags.scale_times << std::endl;
+  if(RANK == 0) std::cout << "*~~~~~~~~~~~~FLAGS~~~~~~~~~~~~*" << std::endl;
+  if(RANK == 0) std::cout << "- cpu: " << flags.cpu << std::endl;
+  if(RANK == 0) std::cout << "- gpu: " << flags.gpu << std::endl;
+  if(RANK == 0) std::cout << "- sparse: " << flags.sparse << std::endl;
+  if(RANK == 0) std::cout << "- dense: " << flags.dense << std::endl;
+  if(RANK == 0) std::cout << "- exact: " << flags.exact << std::endl;
+  if(RANK == 0) std::cout << "- approximation: " << flags.approximation << std::endl;
+  if(RANK == 0) std::cout << "- calculation half-precision: " << flags.calculation_half_precision << std::endl;
+  if(RANK == 0) std::cout << "- calculation quad-precision: " << flags.calculation_quad_precision << std::endl;
+  if(RANK == 0) std::cout << "- storage half-precision: " << flags.storage_half_precision << std::endl;
+  if(RANK == 0) std::cout << "- storage quad-precision: " << flags.storage_quad_precision << std::endl;
+  if(RANK == 0) std::cout << "- binary graph: " << flags.binary_graph << std::endl;
+  if(RANK == 0) std::cout << "- grid_graph: " << flags.grid_graph << std::endl;
+  if(RANK == 0) std::cout << "- gridm: " << flags.gridm << std::endl;
+  if(RANK == 0) std::cout << "- gridn: " << flags.gridn << std::endl;
+  if(RANK == 0) std::cout << "- perman_algo: " << flags.perman_algo << std::endl;
+  if(RANK == 0) std::cout << "- threads: " << flags.threads << std::endl;
+  if(RANK == 0) std::cout << "- scale_intervals: " << flags.scale_intervals << std::endl;
+  if(RANK == 0) std::cout << "- scale_times: " << flags.scale_times << std::endl;
   printf("- fname: %s \n", flags.filename);
-  std::cout << "- type: " << flags.type << std::endl;
-  std::cout << "- no rep.: " << flags.rep << std::endl;
-  std::cout << "- preprocessing: " << flags.preprocessing << std::endl;
-  std::cout << "- gpu_num: " << flags.gpu_num << std::endl;
-  std::cout << "- number_of_times: " << flags.number_of_times << std::endl;
-  std::cout << "- grid_dim: " << flags.grid_dim << std::endl;
-  std::cout << "- block_dim: " << flags.block_dim << std::endl;
-  std::cout << "- device_id: " << flags.device_id << std::endl;
-  std::cout << "- grid_multip: " << flags.grid_multip << std::endl;
-  std::cout << "- compression: " << flags.compression << std::endl;
-  std::cout << "- scaling_threshold: " << flags.scaling_threshold << std::endl;
-  std::cout << "- hostname: " << hostname << std::endl;
-  std::cout << "*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
+  if(RANK == 0) std::cout << "- type: " << flags.type << std::endl;
+  if(RANK == 0) std::cout << "- no rep.: " << flags.rep << std::endl;
+  if(RANK == 0) std::cout << "- preprocessing: " << flags.preprocessing << std::endl;
+  if(RANK == 0) std::cout << "- gpu_num: " << flags.gpu_num << std::endl;
+  if(RANK == 0) std::cout << "- number_of_times: " << flags.number_of_times << std::endl;
+  if(RANK == 0) std::cout << "- grid_dim: " << flags.grid_dim << std::endl;
+  if(RANK == 0) std::cout << "- block_dim: " << flags.block_dim << std::endl;
+  if(RANK == 0) std::cout << "- device_id: " << flags.device_id << std::endl;
+  if(RANK == 0) std::cout << "- grid_multip: " << flags.grid_multip << std::endl;
+  if(RANK == 0) std::cout << "- compression: " << flags.compression << std::endl;
+  if(RANK == 0) std::cout << "- scaling_threshold: " << flags.scaling_threshold << std::endl;
+  if(RANK == 0) std::cout << "- hostname: " << hostname << std::endl;
+  if(RANK == 0) std::cout << "*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*" << std::endl;
   //
 }
 
@@ -154,7 +148,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	result = parallel_perman64<double, S>(densemat, flags);	
     }
     else{
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     }
   }
@@ -209,7 +203,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else
       {
-	std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+	if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
 	exit(1);
       }
   }
@@ -248,7 +242,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	result = approximation_perman64<double, S>(densemat, flags); 
     }
     else{
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     }  
   }
@@ -286,7 +280,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	result = approximation_perman64_sparse<double, S>(sparsemat, flags);
     }
     else{
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     }  
   }
@@ -533,7 +527,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     
     else{
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     }
   }
@@ -663,7 +657,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     }
     else{
-    std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+    if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     }
   }
@@ -735,7 +729,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
       
     }
     else {
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
       exit(1);
     } 
   }
@@ -809,7 +803,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	
     } 
     else {
-      std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
+      if(RANK == 0) std::cout << "No algorithm with specified setting, exiting.. " << std::endl;
     } 
   }
   
@@ -1160,12 +1154,12 @@ Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S
 
 
 #ifdef DEBUG
-
-  std::cout << "*****" << std::endl;
-  cout << "In, compress_and_calculate_recursive-> " << recursive_count++ << endl;
   
-  cout << "densemat->nov: " << densemat->nov << endl;
-  cout << "densemat->nnz: " << densemat->nnz << endl;
+  if(RANK == 0) std::cout << "*****" << std::endl;
+  if(RANK == 0) std::cout << "In, compress_and_calculate_recursive-> " << recursive_count++ << std::endl;
+  
+  if(RANK == 0) std::cout << "densemat->nov: " << densemat->nov << std::endl;
+  if(RANK == 0) std::cout << "densemat->nnz: " << densemat->nnz << std::endl;
   
   if(flags.type == "float" || flags.type == "double")
     print_float_densematrix(densemat);
@@ -1173,7 +1167,7 @@ Result compress_and_calculate_recursive(DenseMatrix<S>* densemat, SparseMatrix<S
     print_densematrix(densemat);
 
   print_sparsematrix(sparsemat);
-  std::cout << "*****" << std::endl;
+  if(RANK == 0) std::cout << "*****" << std::endl;
 #endif
   
   bool silent = 0;
@@ -1298,9 +1292,8 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     DenseMatrix<double>* densemat2 = swap_types<S, double>(densemat);
     
 #ifdef DEBUG
-    std::cout << "Swapped mat type: double" << std::endl;
+    if(RANK == 0) std::cout << "Swapped mat type: double" << std::endl;
 #endif
-    
     //delete densemat;
     //delete sparsemat;
     
@@ -1312,7 +1305,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     SparseMatrix<double>* sparsemat3 = create_sparsematrix_from_densemat2(densemat2, flags);
     
 #ifdef HEAVYDEBUG
-    std::cout << "Scaled matrix: " << std::endl;
+    if(RANK == 0) std::cout << "Scaled matrix: " << std::endl;
     print_float_densematrix(densemat2);
     print_sparsematrix(sparsemat3);
 #endif
@@ -1344,7 +1337,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     DenseMatrix<float>* densemat2 = swap_types<S, float>(densemat);
 
 #ifdef DEBUG
-    std::cout << "Swapped mat type: float" << std::endl;
+    if(RANK == 0) std::cout << "Swapped mat type: float" << std::endl;
 #endif
 
     
@@ -1359,7 +1352,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
     SparseMatrix<float>* sparsemat3 = create_sparsematrix_from_densemat2(densemat2, flags);
 
 #ifdef HEAVYDEBUG
-    std::cout << "Scaled matrix: " << std::endl;
+    if(RANK == 0) std::cout << "Scaled matrix: " << std::endl;
     print_float_densematrix(densemat2);
     print_sparsematrix(sparsemat3);
 #endif
@@ -1442,7 +1435,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
   }
 
   else{
-    std::cout << "Why do you want to scale? Exiting.. " << std::endl;
+    if(RANK == 0) std::cout << "Why do you want to scale? Exiting.. " << std::endl;
     exit(1);
   }
 
@@ -1455,14 +1448,17 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 int main (int argc, char **argv)
 {
 
-  //int rank;
-  //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  //if(rank == 0) {
-  //printf ("Hello world! I'm rank %d\n", rank);
-  //}
-  //else{printf("I'm rank %d \n", rank);}
+#ifdef MPIENABLED
+  MPI_Init(NULL, NULL);
+  MPI_Comm_rank(MPI_COMM_WORLD, &RANK);
+  MPI_Comm_size(MPI_COMM_WORLD, &NPROCS);
+
+  if(RANK == 0) printf("==SC== MPI Initialized.. \n");
+#else
+  RANK = 0;
+#endif
   
-  std::cout << "**command: ";
+  if(RANK == 0) std::cout << "**command: ";
   for(int i = 0 ; i < argc; i++){
     std::cout << argv[i] << " ";
   }
@@ -1789,7 +1785,7 @@ int main (int argc, char **argv)
   
   if(mm_is_real(matcode) == 1 && !flags.storage_half_precision && !is_pattern && !is_binary && !flags.storage_quad_precision){ 
 #ifdef DEBUG
-    std::cout << "Read Case: 0" << std::endl;
+    if(RANK == 0) std::cout<< "Read Case: 0" << std::endl;
 #endif
     flags.type = "double";
     SparseMatrix<double>* sparsemat;
@@ -1815,7 +1811,7 @@ int main (int argc, char **argv)
 
         
 #ifdef DEBUG
-    std::cout << "Read.. OK! -- Sparse Representation Compressing.. " << std::endl;
+    if(RANK == 0) std::cout<< "Read.. OK! -- Sparse Representation Compressing.. " << std::endl;
 #endif
     if(flags.preprocessing == 0)
       matrix2compressed_o(densemat, sparsemat); 
@@ -1825,7 +1821,7 @@ int main (int argc, char **argv)
       matrix2compressed_skipOrder_o(densemat, sparsemat);
     
 #ifdef DEBUG
-    std::cout << "Sparse Compression..OK!" << std::endl;
+    if(RANK == 0) std::cout<< "Sparse Compression..OK!" << std::endl;
 
     print_sparsematrix(sparsemat);
     print_densematrix(densemat);
@@ -1839,7 +1835,7 @@ int main (int argc, char **argv)
       scaling_chosen = 1;
     
 #ifdef DEBUG
-    std::cout << "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
+    if(RANK == 0) std::cout<< "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
 #endif
     
     for(int i = 0; i < flags.rep; i++){
@@ -1871,7 +1867,7 @@ int main (int argc, char **argv)
   
   else if(mm_is_real(matcode) == 1 && !flags.storage_half_precision && !is_pattern && !is_binary && flags.storage_quad_precision){
 #ifdef DEBUG
-    std::cout << "Read Case: 1" << std::endl;
+    if(RANK == 0) std::cout<< "Read Case: 1" << std::endl;
 #endif
     flags.type = "__float128";
     SparseMatrix<__float128>* sparsemat;
@@ -1896,7 +1892,7 @@ int main (int argc, char **argv)
       readSymmetricDenseMatrix(densemat, flags.filename, is_pattern, is_binary);
     
 #ifdef DEBUG
-    std::cout << "Read.. OK! -- Sparse Representation Compressing.. " << std::endl;
+    if(RANK == 0) std::cout<< "Read.. OK! -- Sparse Representation Compressing.. " << std::endl;
 #endif
     if(flags.preprocessing == 0)
       matrix2compressed_o(densemat, sparsemat); 
@@ -1906,7 +1902,7 @@ int main (int argc, char **argv)
       matrix2compressed_skipOrder_o(densemat, sparsemat);
     
 #ifdef DEBUG
-    std::cout << "Sparse Compression..OK!" << std::endl;
+    if(RANK == 0) std::cout<< "Sparse Compression..OK!" << std::endl;
 
     print_sparsematrix(sparsemat);
     print_densematrix(densemat);
@@ -1919,7 +1915,7 @@ int main (int argc, char **argv)
       scaling_chosen = 1;
     
 #ifdef DEBUG
-    std::cout << "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
+    if(RANK == 0) std::cout<< "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
 #endif
 
     //No scaling for __float128
@@ -1949,7 +1945,7 @@ int main (int argc, char **argv)
   
   else if(mm_is_real(matcode) == 1 && flags.storage_half_precision && !is_pattern && !is_binary){
 #ifdef DEBUG
-    std::cout << "Read Case: 2" << std::endl;
+    if(RANK == 0) std::cout<< "Read Case: 2" << std::endl;
 #endif
     flags.type = "float";
     SparseMatrix<float>* sparsemat;
@@ -1974,7 +1970,7 @@ int main (int argc, char **argv)
       readSymmetricDenseMatrix(densemat, flags.filename, is_pattern, is_binary);
     
 #ifdef DEBUG
-    std::cout << "Read.. OK! -- Compressing.. " << std::endl;
+    if(RANK == 0) std::cout<< "Read.. OK! -- Compressing.. " << std::endl;
 #endif
     if(flags.preprocessing == 0)
       matrix2compressed_o(densemat, sparsemat); 
@@ -1983,7 +1979,7 @@ int main (int argc, char **argv)
     if(flags.preprocessing == 2)
       matrix2compressed_skipOrder_o(densemat, sparsemat);
 #ifdef DEBUG
-    std::cout << "Compression..OK!" << std::endl;
+    if(RANK == 0) std::cout<< "Compression..OK!" << std::endl;
 
     print_sparsematrix(sparsemat);
     print_densematrix(densemat);
@@ -1996,7 +1992,7 @@ int main (int argc, char **argv)
       scaling_chosen = 1;
 
 #ifdef DEBUG
-    std::cout << "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
+    if(RANK == 0) std::cout<< "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
 #endif
     
     for(int i = 0; i < flags.rep; i++){
@@ -2026,7 +2022,7 @@ int main (int argc, char **argv)
   
   else if(mm_is_integer(matcode) == 1 || is_pattern || is_binary){
 #ifdef DEBUG
-    std::cout << "Read Case: 3" << std::endl;
+    if(RANK == 0) std::cout<< "Read Case: 3" << std::endl;
 #endif
     flags.type = "int";
     SparseMatrix<int>* sparsemat;
@@ -2052,7 +2048,7 @@ int main (int argc, char **argv)
 
 
 #ifdef DEBUG
-    std::cout << "Read.. OK! -- Compressing.. " << std::endl;
+    if(RANK == 0) std::cout<< "Read.. OK! -- Compressing.. " << std::endl;
 #endif
     if(flags.preprocessing == 0)
       matrix2compressed_o(densemat, sparsemat); 
@@ -2061,7 +2057,7 @@ int main (int argc, char **argv)
     if(flags.preprocessing == 2)
       matrix2compressed_skipOrder_o(densemat, sparsemat);
 #ifdef DEBUG
-    std::cout << "Compression..OK!" << std::endl;
+    if(RANK == 0) std::cout<< "Compression..OK!" << std::endl;
 
     print_sparsematrix(sparsemat);
     print_densematrix(densemat);
@@ -2075,7 +2071,7 @@ int main (int argc, char **argv)
       scaling_chosen = 1;
     
 #ifdef DEBUG
-    std::cout << "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
+    if(RANK == 0) std::cout<< "Scaling chosen: " << scaling_chosen << " threshold: " << flags.scaling_threshold << std::endl;
 #endif
     for(int i = 0; i < flags.rep; i++){
       Result result;
@@ -2101,7 +2097,7 @@ int main (int argc, char **argv)
   }
   
   else{
-    std::cout << "Matrix or flags have overlapping features.. " <<std::endl;
+    if(RANK == 0) std::cout << "Matrix or flags have overlapping features.. " <<std::endl;
     print_flags(flags);
     exit(1);
   }

@@ -4,12 +4,15 @@
 #include<string>
 #include<iostream>
 
+
 #ifdef MPIENABLED
-#ifndef MPIINCLUDED
 #include<mpi.h>
-#define MPIINCLUDED
+extern int RANK;
+extern int NPROCS;
+#else
+extern int RANK;
 #endif
-#endif
+
 
 template<class C>
 struct ScaleCompanion{

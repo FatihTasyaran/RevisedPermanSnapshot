@@ -81,7 +81,7 @@ void print_flags(flags flags){
   if(RANK == 0) std::cout << "- threads: " << flags.threads << std::endl;
   if(RANK == 0) std::cout << "- scale_intervals: " << flags.scale_intervals << std::endl;
   if(RANK == 0) std::cout << "- scale_times: " << flags.scale_times << std::endl;
-  printf("- fname: %s \n", flags.filename);
+  if(RANK == 0) printf("- fname: %s \n", flags.filename);
   if(RANK == 0) std::cout << "- type: " << flags.type << std::endl;
   if(RANK == 0) std::cout << "- no rep.: " << flags.rep << std::endl;
   if(RANK == 0) std::cout << "- preprocessing: " << flags.preprocessing << std::endl;

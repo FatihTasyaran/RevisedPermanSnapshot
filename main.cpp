@@ -212,7 +212,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 1) { // rasmussen
 #ifdef DEBUG
-      printf("Calling, rasmussen() \n");
+      if(RANK==0) printf("Calling, rasmussen() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -228,7 +228,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     else if (perman_algo == 2) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("Calling, approximation_perman64() \n");
+      if(RANK==0) printf("Calling, approximation_perman64() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -251,7 +251,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 1) { // rasmussen
 #ifdef DEBUG
-      printf("Calling, rasmussen_sparse() \n");
+      if(RANK==0) printf("Calling, rasmussen_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -266,7 +266,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 2) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("Calling, approximation_perman64_sparse() \n");
+      if(RANK==0) printf("Calling, approximation_perman64_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -291,7 +291,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 21) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xglobal() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xglobal() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -304,7 +304,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 1) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xlocal() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xlocal() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -319,7 +319,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 2) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -337,7 +337,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     else if (perman_algo == 3) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -352,7 +352,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 31) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -367,7 +367,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 32) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texfour() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texfour() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -382,7 +382,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 33) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texeight() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_texeight() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -397,7 +397,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 34) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -412,7 +412,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 35) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -427,7 +427,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     else if (perman_algo == 36) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_selected() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_selected() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -442,7 +442,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 37) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_plainmatrix_mshared_selected_perwarp() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -457,7 +457,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 
     else if (perman_algo == 38) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xregister_coalescing_plainmatrix_mshared_selected_perwarp() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -473,7 +473,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     else if (perman_algo == 4) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -487,7 +487,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 5) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -501,7 +501,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 6) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distribution() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_manual_distribution() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -513,7 +513,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 7) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -536,7 +536,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 1) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xlocal_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xlocal_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -549,7 +549,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 2) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -563,7 +563,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 3) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -579,7 +579,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 4) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -593,7 +593,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 5) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -606,7 +606,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 7) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -619,7 +619,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 14){
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_skipper() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_skipper() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -632,7 +632,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 17){
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_chunks_skipper() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_chunks_skipper() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -645,7 +645,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 6) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_sparse_manual_distribution \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpu_sparse_manual_distribution \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -667,7 +667,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 1) { // rasmussen
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_rasmussen() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_rasmussen() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -683,7 +683,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 2) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_approximation() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_approximation() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -699,7 +699,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 3) { // rasmussen
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_rasmussen_multigpucpu_chunks() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_rasmussen_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -715,7 +715,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("gpu_perman64_approximation_multigpucpu_chunks() \n");
+      if(RANK==0) printf("gpu_perman64_approximation_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -739,7 +739,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     if (perman_algo == 1) { // rasmussen
 #ifdef DEBUG
-      printf("gpu_perman64_rasmussen_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_rasmussen_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -755,7 +755,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 2) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("gpu_perman64_approximation_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_approximation_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -773,7 +773,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 3) { // rasmussen
 #ifdef DEBUG
-      printf("gpu_perman64_rasmussen_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_rasmussen_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -788,7 +788,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
 	
     } else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("gpu_perman64_approximation_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_approximation_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -810,7 +810,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
   if(gpu && cpu && dense && exact){
     if (perman_algo == 7) {
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -829,7 +829,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     if(perman_algo == 7){
       
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -844,7 +844,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     
     else if(perman_algo == 17){
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_xshared_coalescing_mshared_multigpucpu_chunks_skipper() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -862,7 +862,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
   if(gpu && cpu && dense && approximation){
     if (perman_algo == 3) { // rasmussen
 #ifdef DEBUG
-      printf("Calling, gpu_perman64_rasmussen_multigpucpu_chunks() \n");
+      if(RANK==0) printf("Calling, gpu_perman64_rasmussen_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -877,7 +877,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("gpu_perman64_approximation_multigpucpu_chunks() \n");
+      if(RANK==0) printf("gpu_perman64_approximation_multigpucpu_chunks() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -895,7 +895,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
   if(gpu && cpu && sparse && approximation){
     if (perman_algo == 3) { // rasmussen
 #ifdef DEBUG
-      printf("gpu_perman64_rasmussen_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_rasmussen_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -911,7 +911,7 @@ Result RunAlgo(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat, flags &flag
     }
     else if (perman_algo == 4) { // approximation_with_scaling
 #ifdef DEBUG
-      printf("gpu_perman64_approximation_multigpucpu_chunks_sparse() \n");
+      if(RANK==0) printf("gpu_perman64_approximation_multigpucpu_chunks_sparse() \n");
 #endif
 #ifdef STRUCTURAL
       exit(1);
@@ -1085,7 +1085,7 @@ void RunPermanForGridGraphs(flags flags) {
   } 
 #endif
 
-  printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+  if(RANK==0) printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
   
   delete[] mat;
   delete[] cptrs;
@@ -1316,7 +1316,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
       result = RunAlgo(densemat2, sparsemat3, flags, false);
     
 #ifdef DEBUG
-    printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+    if(RANK==0) printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
 #endif
     
     for(int i = 0; i < nov; i++){
@@ -1364,7 +1364,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
       result = RunAlgo(densemat2, sparsemat3, flags, false);
 
 #ifdef DEBUG
-    printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+    if(RANK==0) printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
 #endif
     
     for(int i = 0; i < nov; i++){
@@ -1396,7 +1396,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
 
 
 #ifdef DEBUG
-    printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+    if(RANK==0) printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
 #endif
       
     for(int i = 0; i < nov; i++){
@@ -1422,7 +1422,7 @@ Result scale_and_calculate(DenseMatrix<S>* densemat, SparseMatrix<S>* sparsemat,
       result = RunAlgo(densemat, sparsemat2, flags, false);
     
 #ifdef DEBUG
-    printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+    if(RANK==0) printf("Mid Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
 #endif
     
     for(int i = 0; i < nov; i++){
@@ -1453,16 +1453,18 @@ int main (int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &RANK);
   MPI_Comm_size(MPI_COMM_WORLD, &NPROCS);
 
-  if(RANK == 0) printf("==SC== MPI Initialized.. \n");
+  if(RANK == 0) if(RANK==0) printf("==SC== MPI Initialized.. \n");
 #else
   RANK = 0;
 #endif
   
-  if(RANK == 0) std::cout << "**command: ";
-  for(int i = 0 ; i < argc; i++){
-    std::cout << argv[i] << " ";
+  if(RANK == 0) {
+    std::cout << "**command: ";
+    for(int i = 0 ; i < argc; i++){
+      std::cout << argv[i] << " ";
+    }
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
   
   bool generic = true;
   bool dense = true;
@@ -1680,7 +1682,7 @@ int main (int argc, char **argv)
   
   for (int index = optind; index < argc; index++)
     {
-      printf ("Non-option argument %s\n", argv[index]);
+      if(RANK==0) printf ("Non-option argument %s\n", argv[index]);
     }
   
   if (!flags.cpu && !flags.gpu) {
@@ -1688,7 +1690,7 @@ int main (int argc, char **argv)
   }
 
   if(flags.gpu && (flags.storage_quad_precision || flags.calculation_quad_precision)){
-    std::cout << "Quad precision is only available with cpu.. exiting.. " << std::endl;
+    if(RANK == 0) std::cout << "Quad precision is only available with cpu.. exiting.. " << std::endl;
     exit(1);
   }
   
@@ -1717,42 +1719,42 @@ int main (int argc, char **argv)
   int *I, *J;
   
   if((f = fopen(flags.filename, "r")) == NULL){
-    printf("Error opening the file, exiting.. \n");
+    if(RANK==0) printf("Error opening the file, exiting.. \n");
     exit(1);
   }
   
   if(mm_read_banner(f, &matcode) != 0){
-    printf("Could not process Matrix Market Banner, exiting.. \n");
+    if(RANK==0) printf("Could not process Matrix Market Banner, exiting.. \n");
     exit(1);
   }
   
   if(mm_is_matrix(matcode) != 1){
-    printf("SUPerman only supports matrices, exiting.. \n");
+    if(RANK==0) printf("SUPerman only supports matrices, exiting.. \n");
     exit(1);
   }
 
   if(mm_is_coordinate(matcode) != 1){
-    printf("SUPerman only supports mtx format at the moment, exiting.. \n");
+    if(RANK==0) printf("SUPerman only supports mtx format at the moment, exiting.. \n");
     exit(1);
   }
   
   if((ret_code = mm_read_mtx_crd_size(f, &M, &N, &nz)) != 0){
-    printf("Matrix size cannot be read, exiting.. \n");
+    if(RANK==0) printf("Matrix size cannot be read, exiting.. \n");
   }
 
 #ifdef DEBUG
-  std::cout << "M: " << M << " N: " << N << " nz: " << nz << std::endl;
+  if(RANK == 0) std::cout << "M: " << M << " N: " << N << " nz: " << nz << std::endl;
 #endif
   nov = M;
   nnz = nz;
 
   if(M != N){
-    printf("SUPerman only works with nxn matrices, exiting.. ");
+    if(RANK==0) printf("SUPerman only works with nxn matrices, exiting.. ");
     exit(1);
   }
   
   if(mm_is_complex(matcode) == 1){
-    printf("SUPerman does not support complex type, exiting.. ");
+    if(RANK==0) printf("SUPerman does not support complex type, exiting.. ");
     exit(1);
     //Instead of exit(1), there should be an escape function
     //which frees the allocated memory
@@ -1774,13 +1776,13 @@ int main (int argc, char **argv)
     nz *= 2;
 
 #ifdef DEBUG
-  std::cout << "Matrix is pattern: " << is_pattern << std::endl;
+  if(RANK == 0) std::cout << "Matrix is pattern: " << is_pattern << std::endl;
 #endif
 
   double final_perman;
 
 #ifdef DEBUG
-  cout << "matcode - stor_half - !is_pattern - !is_binary: " << mm_is_real(matcode) << " " <<!flags.storage_half_precision << " " <<!is_pattern << " " <<!is_binary << endl;
+  if(RANK == 0) std::cout << "matcode - stor_half - !is_pattern - !is_binary: " << mm_is_real(matcode) << " " <<!flags.storage_half_precision << " " <<!is_pattern << " " <<!is_binary << endl;
 #endif
   
   if(mm_is_real(matcode) == 1 && !flags.storage_half_precision && !is_pattern && !is_binary && !flags.storage_quad_precision){ 
@@ -1856,7 +1858,7 @@ int main (int argc, char **argv)
 	else
 	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       }
-      printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      if(RANK==0) printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
       delete copy_densemat;
       delete copy_sparsemat;
     }
@@ -1934,7 +1936,7 @@ int main (int argc, char **argv)
       else
 	result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       
-      printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      if(RANK==0) printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
       delete copy_densemat;
       delete copy_sparsemat;
     }
@@ -2014,7 +2016,7 @@ int main (int argc, char **argv)
 	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
 	
       }
-      printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      if(RANK==0) printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
       delete copy_densemat;
       delete copy_sparsemat;
     }
@@ -2090,7 +2092,7 @@ int main (int argc, char **argv)
 	else
 	  result = RunAlgo(copy_densemat, copy_sparsemat, flags, false);
       }
-      printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
+      if(RANK==0) printf("Result || %s | %s | %.16e in %f \n", flags.algo_name.c_str(), flags.filename, result.permanent, result.time);
       delete copy_densemat;
       delete copy_sparsemat;
     }

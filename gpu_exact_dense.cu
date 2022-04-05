@@ -2091,14 +2091,16 @@ template <class C, class S>
                                                  0);
 
   size_t size = nov*nov*sizeof(S);
-  
-  printf("==SC== Shared memory per block is set to : %zu \n", size);
-  printf("==SC== Grid dim is set to : %d \n", grid_dim);
-  printf("==SC== Block dim is set to : %d \n", block_dim);
+
+  if(RANK == 0){
+    printf("==SC== Shared memory per block is set to : %zu \n", size);
+    printf("==SC== Grid dim is set to : %d \n", grid_dim);
+    printf("==SC== Block dim is set to : %d \n", block_dim);
+  }
   
   if(grid_dim_multip != 1){
     grid_dim*=grid_dim_multip;
-    printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
+    if(RANK==0) printf("==SC== Grid dim is re-set to : %d \n", grid_dim);
   }
 
   S *d_mat;

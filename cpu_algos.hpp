@@ -833,6 +833,22 @@ Result parallel_perman64(DenseMatrix<S>* densemat, flags flags) {
         }
       }
     }
+
+    if(tid == 0) printf("Chunk size: %lld \n", chunk_size);
+    
+#pragma omp critical
+    {
+      printf("############################ \n");
+      printf("tid: %d | xvector: \n", tid);
+      for(int j = 0; j < nov; j++){
+	printf("%f ", (double)x[j]);
+      }
+      printf("\n");
+      printf("############################ \n");
+    }
+
+    printf("my_start: %lld | my_end: %lld \n", my_start, my_end);
+    
     int k;
 
     int prodSign = 1;

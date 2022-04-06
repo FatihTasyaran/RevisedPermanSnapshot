@@ -2111,24 +2111,17 @@ template <class C, class S>
   cudaMalloc( &d_p, (grid_dim * block_dim) * sizeof(C));
   cudaMalloc( &d_mat, (nov * nov) * sizeof(S));
 
-  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
-  cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
+  
 
   long long start = 1;
   long long end = (1LL << (nov-1));
 
   long long my_start;
-  long long my_end;
+  long long my_end;  
 
+  long long offset = end / NPROCS + 1;
 
-  //X vector needs to have different initial x vectors
-
-  //int rank, nprocs;
-  //MPI_Init(NULL, NULL);
-  //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  //MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-
-  long long offset = (end - start) / NPROCS;
+  if(RANK == 0) printf("offset: %lld \n", offset);
 
   my_start = start + RANK*offset;
 
@@ -2137,7 +2130,41 @@ template <class C, class S>
   else
     my_end = start + (RANK+1)*offset;
 
-  printf("My RANK: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld\n", RANK, NPROCS, my_start, my_end, start, end);
+
+  C* xptr;
+  long long gray;
+  gray = (my_start - 1) ^ ((my_start - 1) >> 1);
+
+  for(int k = 0; k < (nov - 1); k++){
+    if((gray >> k) & 1LL){
+      xptr = (C*)x;
+      for(int j = 0; j < nov; j++){
+	*xptr += mat[(j * nov) + k];
+	xptr++;
+      }
+    }
+  }
+
+  for(int i = 0; i < NPROCS; i++){
+    if(i == RANK){
+      printf("############################\n");
+      printf("RANK: %d | xvector: \n", RANK);
+      for(int j = 0; j < nov; j++){
+	printf("%f ", x[j]);
+      }
+      printf("\n");
+      printf("############################\n");
+      fflush(stdout);
+    }
+    MPI_Barrier (MPI_COMM_WORLD);
+  }
+  
+
+  printf("My RANK: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld || my_gray: %lld\n", RANK, NPROCS, my_start, my_end, start, end, gray);
+
+  //X vector needs to have different initial values
+  cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
+  cudaMemcpy( d_mat, mat, (nov * nov) * sizeof(S), cudaMemcpyHostToDevice);
   
   kernel_xregister_coalescing_plainmatrix_mshared<C,S><<<grid_dim , block_dim , size>>>(d_mat, d_x, d_p, nov, my_start, my_end);
   cudaDeviceSynchronize();
@@ -2153,7 +2180,12 @@ template <class C, class S>
   //printf("h_p[%d]: %e \n", i, h_p[i]);
   //}
 
-  double return_p = p;
+  
+  double return_p;
+  if(RANK == 0)
+    return_p = p;
+  else
+    return_p = 0;
   
   for (int i = 0; i < grid_dim * block_dim; i++) {
     return_p += (double)h_p[i];
@@ -2161,7 +2193,8 @@ template <class C, class S>
   }
 
   delete[] h_p;
-  
+
+  MPI_Barrier(MPI_COMM_WORLD);
   double reduce_p = 0;
   MPI_Reduce(&return_p, &reduce_p, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   
@@ -2173,10 +2206,10 @@ template <class C, class S>
   
   double perman = (4*(nov&1)-2) * return_p;
 
-  MPI_Finalize();
-
+  //MPI_Finalize();
+  MPI_Barrier(MPI_COMM_WORLD);
   double duration = omp_get_wtime() - starttime;
-  Result result(perman, duration);
+  Result result(reduce_perman, duration);
   return result;
 
 #else

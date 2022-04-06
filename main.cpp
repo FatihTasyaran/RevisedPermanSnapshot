@@ -2103,6 +2103,10 @@ int main (int argc, char **argv)
     print_flags(flags);
     exit(1);
   }
+
+#ifdef MPIENABLED
+  MPI_Finalize();
+#endif
   
   return 0;
 }

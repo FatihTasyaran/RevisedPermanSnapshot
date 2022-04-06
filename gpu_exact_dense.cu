@@ -2061,7 +2061,8 @@ template <class C, class S>
   //cudaSetDevice(device_id);
   cudaDeviceSynchronize();
 
-  double starttime = omp_get_wtime();
+  //double starttime = omp_get_wtime();
+  double starttime = MPI_Wtime();
   
   C x[nov]; 
   C rs; //row sum
@@ -2121,7 +2122,7 @@ template <class C, class S>
 
   long long offset = end / NPROCS + 1;
 
-  if(RANK == 0) printf("offset: %lld \n", offset);
+  //if(RANK == 0) printf("offset: %lld \n", offset);
 
   my_start = start + RANK*offset;
 
@@ -2199,16 +2200,16 @@ template <class C, class S>
   MPI_Reduce(&return_p, &reduce_p, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   
   double reduce_perman = (4*(nov&1)-2) * reduce_p;
-  printf("My RANK: %d / %d || Partial sum: %.16e \n", RANK, NPROCS, return_p);
-  if(RANK == 0)
-    printf("MPI Result || %.16e -> %.16e \n", reduce_p, reduce_perman);
+  //printf("My RANK: %d / %d || Partial sum: %.16e \n", RANK, NPROCS, return_p);
+  //if(RANK == 0)
+  //printf("MPI Result || %.16e -> %.16e \n", reduce_p, reduce_perman);
   
   
   double perman = (4*(nov&1)-2) * return_p;
 
   //MPI_Finalize();
   MPI_Barrier(MPI_COMM_WORLD);
-  double duration = omp_get_wtime() - starttime;
+  double duration = MPI_Wtime() - starttime;
   Result result(reduce_perman, duration);
   return result;
 

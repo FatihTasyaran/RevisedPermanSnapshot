@@ -2130,7 +2130,7 @@ template <class C, class S>
   else
     my_end = start + (RANK+1)*offset;
 
-
+  /*
   C* xptr;
   long long gray;
   gray = (my_start - 1) ^ ((my_start - 1) >> 1);
@@ -2158,9 +2158,9 @@ template <class C, class S>
     }
     MPI_Barrier (MPI_COMM_WORLD);
   }
-  
+  */
 
-  printf("My RANK: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld || my_gray: %lld\n", RANK, NPROCS, my_start, my_end, start, end, gray);
+  //printf("My RANK: %d / %d  || my_start: %lld - my_end: %lld || start: %lld - end: %lld || my_gray: %lld\n", RANK, NPROCS, my_start, my_end, start, end, gray);
 
   //X vector needs to have different initial values
   cudaMemcpy( d_x, x, (nov) * sizeof(C), cudaMemcpyHostToDevice);
